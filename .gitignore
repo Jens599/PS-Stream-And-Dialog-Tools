@@ -1,0 +1,14 @@
+# Ignore everything
+*
+
+# Except .gitignore
+!.gitignore
+
+# And the directories
+!Show-Menu/
+!Show-Menu/*
+
+!Start-MPVStream/
+!Start-MPVStream/*
+
+!readme.md
