@@ -52,6 +52,8 @@ A comprehensive media player wrapper that provides streamlined playback experien
 - Hardware acceleration support
 - Playlist control (reverse order)
 - Loop playback
+- Cookie-based authentication for YouTube
+- Persistent cookie path configuration
 
 #### Usage Examples
 ```powershell
@@ -66,6 +68,12 @@ play 'lofi beats' -s -p -f audio
 
 # Custom size and quality
 play 'https://youtu.be/dQw4w9WgXcQ' -sz Small -f 720p
+
+# Configure cookie path (saved persistently)
+play -c 'C:\Users\username\Downloads\cookies.txt'
+
+# Play with authenticated content using saved cookie path
+play 'https://www.youtube.com/playlist?list=PLW8XZTagL0oJhk71Ip3rIzHOFY3Edw2pw'
 ```
 
 ## Installation
