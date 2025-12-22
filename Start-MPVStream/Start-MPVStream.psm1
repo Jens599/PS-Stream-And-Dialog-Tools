@@ -49,7 +49,11 @@ function Start-MPVStream {
         [switch]$Background,
 
         [Alias('r')]
-        [switch]$ReversePlaylist
+        [switch]$ReversePlaylist,
+
+        [Parameter()]
+        [Alias('nosub')]
+        [switch]$NoSubtitles
     )
 
     process {
@@ -311,6 +315,13 @@ function Start-MPVStream {
             $mpvArgs += "--ytdl-raw-options=cookies=$finalCookiePath"
         }
         
+        # Add session ID to MPV (unless disabled)
+        if (-not $NoSubtitles) {
+            $mpvArgs += "--sid=1"
+        }
+
+        
+        
         Write-Host "→ Launching:" -ForegroundColor Green 
         Write-Host "    mpv $($mpvArgs -join ' ') $targetUrl" -ForegroundColor Yellow 
 
@@ -350,6 +361,7 @@ function Write-MPVStreamHelp {
     Write-Host "    $("{0,-22}" -f "-Background, -b") Run in background process" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Loop, -l") Loop playback infinitely" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-HardwareAccel, -h") Enable hardware acceleration" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-NoSessionId, -nosub") Disable session ID (--sid=1)" -ForegroundColor $cDesc 
     Write-Host "`nSearch Features" -ForegroundColor White 
     Write-Host "    $("{0,-22}" -f "-Search, -s") Search YouTube instead of direct URL" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Playlist, -p") Search for playlists only" -ForegroundColor $cDesc 
