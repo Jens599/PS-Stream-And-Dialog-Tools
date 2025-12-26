@@ -92,7 +92,6 @@ function Start-MPVStream {
                 $config = Get-Content $configFile -Raw | ConvertFrom-Json
                 if ($config.cookiePath -and (Test-Path $config.cookiePath -PathType Leaf)) {
                     $finalCookiePath = $config.cookiePath
-                    Write-Host "→ Using saved cookie path: $finalCookiePath" -ForegroundColor Green
                 }
             }
             catch {
