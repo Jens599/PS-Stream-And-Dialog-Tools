@@ -11,7 +11,10 @@
 !Start-MPVStream/
 !Start-MPVStream/*
 
-!ytm-dl
+!ytm-dl/
 !ytm-dl/*
+
+!Add-Path/
+!Add-Path/*
 
 !readme.md

@@ -316,7 +316,7 @@ function Start-MPVStream {
         
         # Add session ID to MPV (unless disabled)
         if (-not $NoSubtitles) {
-            $mpvArgs += "--sid=1"
+            $mpvArgs += "--slang=en"
         }
 
         
