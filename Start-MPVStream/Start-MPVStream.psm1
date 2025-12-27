@@ -53,7 +53,12 @@ function Start-MPVStream {
 
         [Parameter()]
         [Alias('nosub')]
-        [switch]$NoSubtitles
+        [switch]$NoSubtitles,
+
+        [Parameter()]
+        [ValidateRange(1, 50)]
+        [Alias('max')]
+        [int]$MaxResults = 10
     )
 
     process {
@@ -63,8 +68,7 @@ function Start-MPVStream {
             if ($CookiePath) {
                 Write-Host "→ Configuration mode: Testing cookie path" -ForegroundColor Cyan
                 # Cookie configuration logic will run below
-            }
-            else {
+            } else {
                 Write-MPVStreamHelp
                 return
             }
@@ -93,8 +97,7 @@ function Start-MPVStream {
                 if ($config.cookiePath -and (Test-Path $config.cookiePath -PathType Leaf)) {
                     $finalCookiePath = $config.cookiePath
                 }
-            }
-            catch {
+            } catch {
                 Write-Warning "Failed to read config file: $configFile"
             }
         }
@@ -109,12 +112,10 @@ function Start-MPVStream {
                 $config = @{ cookiePath = $finalCookiePath } | ConvertTo-Json
                 $config | Out-File -FilePath $configFile -Encoding UTF8
                 Write-Host "→ Cookie path saved to: $configFile" -ForegroundColor Green
-            }
-            catch {
+            } catch {
                 Write-Warning "Failed to save config file: $configFile"
             }
-        }
-        elseif (-not $finalCookiePath) {
+        } elseif (-not $finalCookiePath) {
             # Default cookie file locations to check
             $defaultCookiePaths = @(
                 "cookies.txt",
@@ -138,8 +139,7 @@ function Start-MPVStream {
                 if ($resolvedPath) {
                     $finalCookiePath = $resolvedPath
                 }
-            }
-            catch {
+            } catch {
                 Write-Warning "Failed to resolve path: $finalCookiePath"
                 $finalCookiePath = $null
             }
@@ -148,8 +148,7 @@ function Start-MPVStream {
         # Validate cookie file exists
         if ($finalCookiePath -and (Test-Path $finalCookiePath -PathType Leaf)) {
             Write-Host "→ Using cookies: $finalCookiePath" -ForegroundColor Green
-        }
-        elseif ($finalCookiePath) {
+        } elseif ($finalCookiePath) {
             Write-Warning "Cookie file not found: $finalCookiePath"
             $finalCookiePath = $null
         }
@@ -158,8 +157,7 @@ function Start-MPVStream {
         if (-not $Url) {
             if ($finalCookiePath) {
                 Write-Host "→ Configuration complete: Cookie path validated" -ForegroundColor Green
-            }
-            else {
+            } else {
                 Write-Host "→ Configuration failed: No valid cookie file found" -ForegroundColor Red
             }
             return
@@ -178,8 +176,7 @@ function Start-MPVStream {
             if ($targetUrl -ne $Url) {
                 Write-Warning "URL contained potentially dangerous characters and has been sanitized."
             }
-        }
-        else {
+        } else {
             $targetUrl = $Url
         }
         # --- 3. Search Logic ---
@@ -190,7 +187,7 @@ function Start-MPVStream {
                 if ($Playlist) {
                     # Search for Playlists specifically using the 'sp' parameter 
                     $searchUrl = "https://www.youtube.com/results?search_query=$encodedQuery&sp=EgIQAw%3D%3D"
-                    $ytdlArgs = @($searchUrl, '--get-id', '--get-title', '--flat-playlist', '--playlist-items', '1:5')
+                    $ytdlArgs = @($searchUrl, '--get-id', '--get-title', '--flat-playlist', '--playlist-items', "1:$MaxResults")
                     if ($finalCookiePath) { $ytdlArgs += "--cookies", $finalCookiePath }
                     $SearchResult = yt-dlp @ytdlArgs 
 
@@ -218,8 +215,7 @@ function Start-MPVStream {
                         if (-not (Get-Command Show-Menu -ErrorAction SilentlyContinue)) {
                             Write-Warning "Show-Menu function not found. Using first result."
                             $resultIndex = 0
-                        }
-                        else {
+                        } else {
                             $resultIndex = Show-Menu -Options $TitleArray -Title "Select a Playlist" -ReturnIndex 
                         }
                         if ($null -eq $resultIndex) { return }
@@ -227,12 +223,10 @@ function Start-MPVStream {
                         $selectedID = $choices[$resultIndex].ID
                         $targetUrl = "https://www.youtube.com/playlist?list=$selectedID"
                         Write-Host "Match [Playlist]: $($choices[$resultIndex].Title)" -ForegroundColor Cyan 
-                    }
-                    else { return }
-                }
-                else {
+                    } else { return }
+                } else {
                     # Standard Video Search
-                    $searchUrl = "ytsearch5:$Url"
+                    $searchUrl = "ytsearch$MaxResults`:$Url"
                     $ytdlArgs = @($searchUrl, '--get-id', '--get-title', '--flat-playlist', '--no-playlist')
                     if ($finalCookiePath) { $ytdlArgs += "--cookies", $finalCookiePath }
                     $SearchResult = yt-dlp @ytdlArgs 
@@ -253,19 +247,16 @@ function Start-MPVStream {
                         if (-not (Get-Command Show-Menu -ErrorAction SilentlyContinue)) {
                             Write-Warning "Show-Menu function not found. Using first result."
                             $resultIndex = 0
-                        }
-                        else {
+                        } else {
                             $resultIndex = Show-Menu -Options $TitleArray -Title "Select a Video" -ReturnIndex
                         }
                         if ($null -eq $resultIndex) { return }
 
                         $targetUrl = "https://www.youtube.com/watch?v=$($choices[$resultIndex].ID)" 
                         Write-Host "Match [Video]: $($choices[$resultIndex].Title)" -ForegroundColor Cyan 
-                    }
-                    else { return }
+                    } else { return }
                 }
-            }
-            catch {
+            } catch {
                 Write-Error "Search failed: $($_.Exception.Message)" 
                 return
             }
@@ -330,16 +321,13 @@ function Start-MPVStream {
                 $processArgs = $mpvArgs + $targetUrl
                 Start-Process -FilePath "mpv" -ArgumentList $processArgs -ErrorAction Stop
                 Write-Host "→ MPV started in background" -ForegroundColor Green
-            }
-            catch {
+            } catch {
                 Write-Error "Failed to start MPV in background: $($_.Exception.Message)"
             }
-        }
-        else {
+        } else {
             try {
                 & mpv $targetUrl @mpvArgs
-            }
-            catch {
+            } catch {
                 Write-Error "Failed to start MPV: $($_.Exception.Message)"
             }
         }
@@ -364,6 +352,7 @@ function Write-MPVStreamHelp {
     Write-Host "`nSearch Features" -ForegroundColor White 
     Write-Host "    $("{0,-22}" -f "-Search, -s") Search YouTube instead of direct URL" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Playlist, -p") Search for playlists only" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-MaxResults, -max <num>") Number of search results (1-50, default: 10)" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-ReversePlaylist, -r") Reverse playlist order" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-CookiePath, -c <path>") Path to cookie file (saved persistently)" -ForegroundColor $cDesc 
     Write-Host "`nExamples" -ForegroundColor White 
