@@ -305,6 +305,9 @@ function Start-MPVStream {
             $mpvArgs += "--ytdl-raw-options=cookies=$finalCookiePath"
         }
         
+        # Add no-download-archive option to prevent archive creation
+        $mpvArgs += "--ytdl-raw-options=no-download-archive="
+        
         # Add session ID to MPV (unless disabled)
         if (-not $NoSubtitles) {
             $mpvArgs += "--slang=en"
