@@ -16,6 +16,8 @@ function Show-Menu {
     $selectedIndex = 0
     $key = $null
     $cursorVisible = $false
+    $width = [Math]::Min([Math]::Max(56, (($Options | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum + 12)), 100)
+    $rule = '─' * ($width - 2)
     
     try {
         # Hide the cursor for a cleaner look
@@ -29,21 +31,72 @@ function Show-Menu {
     try {
         while ($key -ne "Enter") {
             Clear-Host
-            Write-Host "=== $Title ===" -ForegroundColor Cyan
-            Write-Host ""  # Add spacing
+            Write-Host "╭$rule╮" -ForegroundColor DarkCyan
+
+            $header = " $Title "
+            if ($header.Length -gt ($width - 4)) {
+                $header = $header.Substring(0, $width - 7) + '...'
+            }
+            Write-Host '│' -NoNewline -ForegroundColor DarkCyan
+            Write-Host $header.PadRight($width - 2) -NoNewline -ForegroundColor Cyan
+            Write-Host '│' -ForegroundColor DarkCyan
+
+            $countLabel = if ($Title -match 'Results') { 'results' } else { 'items' }
+            $countText = " $($Options.Count) $countLabel "
+            Write-Host '│' -NoNewline -ForegroundColor DarkCyan
+            Write-Host $countText.PadRight($width - 2) -NoNewline -ForegroundColor DarkGray
+            Write-Host '│' -ForegroundColor DarkCyan
+
+            Write-Host "├$rule┤" -ForegroundColor DarkCyan
     
             for ($i = 0; $i -lt $Options.Count; $i++) {
+                $selected = $i -eq $selectedIndex
+                $option = $Options[$i]
+                $badge = $null
+                $titleText = $option
+
+                if ($option -match '^\[(?<type>[^\]]+)\]\s*(?<title>.*)$') {
+                    $badge = $Matches.type.ToUpperInvariant()
+                    $titleText = $Matches.title
+                }
+
+                $number = '{0:00}' -f ($i + 1)
+                $prefix = if ($selected) { ' > ' } else { '   ' }
+                $badgeText = if ($badge) { $badge.PadRight(8) } else { ''.PadRight(8) }
+                $availableTitleWidth = $width - 18
+                if ($titleText.Length -gt $availableTitleWidth) {
+                    $titleText = $titleText.Substring(0, [Math]::Max(0, $availableTitleWidth - 3)) + '...'
+                }
+
+                Write-Host '│' -NoNewline -ForegroundColor DarkCyan
+                Write-Host $prefix -NoNewline -ForegroundColor $(if ($selected) { 'Yellow' } else { 'DarkGray' })
+                Write-Host $number -NoNewline -ForegroundColor DarkGray
+                Write-Host '  ' -NoNewline
+
+                $badgeColor = switch ($badge) {
+                    'CHANNEL' { 'Magenta' }
+                    'PLAYLIST' { 'Yellow' }
+                    'VIDEO' { 'Green' }
+                    default { 'Cyan' }
+                }
+                Write-Host $badgeText -NoNewline -ForegroundColor $badgeColor
+                Write-Host ' ' -NoNewline
+
                 if ($i -eq $selectedIndex) {
-                    # Highlight the selected option
-                    Write-Host "> $($Options[$i])" -ForegroundColor Yellow -BackgroundColor Black
+                    Write-Host $titleText.PadRight($availableTitleWidth) -NoNewline -ForegroundColor Yellow
                 }
                 else {
-                    Write-Host "  $($Options[$i])"
+                    Write-Host $titleText.PadRight($availableTitleWidth) -NoNewline -ForegroundColor Gray
                 }
+
+                Write-Host '│' -ForegroundColor DarkCyan
             }
             
-            Write-Host ""  # Add spacing
-            Write-Host "[↑↓ Navigate] [Enter Select] [Escape Cancel]" -ForegroundColor Gray
+            Write-Host "├$rule┤" -ForegroundColor DarkCyan
+            Write-Host '│' -NoNewline -ForegroundColor DarkCyan
+            Write-Host ' ↑/↓ move   Enter select   Esc cancel '.PadRight($width - 2) -NoNewline -ForegroundColor DarkGray
+            Write-Host '│' -ForegroundColor DarkCyan
+            Write-Host "╰$rule╯" -ForegroundColor DarkCyan
     
             # Wait for user input
             try {

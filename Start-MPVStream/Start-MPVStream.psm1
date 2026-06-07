@@ -63,6 +63,7 @@ function Start-MPVStream {
 
     process {
         # --- 0. Help Check / Config Mode ---
+        $isConfigOnly = [string]::IsNullOrWhiteSpace($Url) -and $CookiePath
         if ([string]::IsNullOrWhiteSpace($Url)) {
             # If only cookie path is provided, enter config mode
             if ($CookiePath) {
@@ -75,13 +76,13 @@ function Start-MPVStream {
         }
 
         # --- 1. Dependency Checks ---
-        if (-not (Get-Command mpv -ErrorAction SilentlyContinue)) {
+        if (-not $isConfigOnly -and -not (Get-Command mpv -ErrorAction SilentlyContinue)) {
             Write-Error "mpv is missing from PATH. Please install mpv media player." 
             return 
         }
         
-        # Only check yt-dlp dependency if searching or in config mode
-        if (($Search -or -not $Url) -and -not (Get-Command yt-dlp -ErrorAction SilentlyContinue)) {
+        # Only check yt-dlp dependency if searching.
+        if ($Search -and -not (Get-Command yt-dlp -ErrorAction SilentlyContinue)) {
             Write-Error "yt-dlp is missing from PATH. Please install yt-dlp for search/configuration functionality." 
             return 
         }
@@ -183,80 +184,98 @@ function Start-MPVStream {
         # --- 3. Search Logic ---
         if ($Search) {
             try {
+                if (-not (Get-Command Show-Menu -ErrorAction SilentlyContinue)) {
+                    $showMenuManifest = Join-Path (Split-Path -Parent $PSScriptRoot) 'Show-Menu\Show-Menu.psd1'
+                    if (Test-Path -LiteralPath $showMenuManifest -PathType Leaf) {
+                        Import-Module $showMenuManifest -ErrorAction SilentlyContinue
+                    }
+                }
+
                 $encodedQuery = [uri]::EscapeDataString($Url) 
                 
                 if ($Playlist) {
                     # Search for Playlists specifically using the 'sp' parameter 
                     $searchUrl = "https://www.youtube.com/results?search_query=$encodedQuery&sp=EgIQAw%3D%3D"
-                    $ytdlArgs = @($searchUrl, '--print', '%(title)s`t%(id)s', '--flat-playlist', '--playlist-items', "1:$MaxResults")
+                    $ytdlArgs = @($searchUrl, '--print', "%(title)s`t%(id)s`t%(ie_key)s`t%(webpage_url)s", '--flat-playlist', '--playlist-items', "1:$MaxResults")
                     if ($finalCookiePath) { $ytdlArgs += "--cookies", $finalCookiePath }
                     $SearchResult = yt-dlp @ytdlArgs 
+                    if ($LASTEXITCODE -is [int] -and $LASTEXITCODE -ne 0) { throw "yt-dlp exited with code $LASTEXITCODE" }
+                    $searchRows = @($SearchResult)
 
-                    if ($null -eq $SearchResult -or $SearchResult.Count -eq 0) {
+                    if ($null -eq $SearchResult -or $searchRows.Count -eq 0) {
                         Write-Host "No playlists found for that search." -ForegroundColor Red 
                         return
                     }
 
-                    Write-Host "Search results found: $($SearchResult.Count)" -ForegroundColor Yellow 
+                    Write-Host "Search results found: $($searchRows.Count)" -ForegroundColor Yellow 
 
                     $choices = [ordered]@{}
 
-                    for ($i = 0; $i -lt $SearchResult.Count; $i++) {
-                        $parts = $SearchResult[$i] -split "`t", 2
-                        if ($parts.Count -eq 2 -and $parts[0] -and $parts[1]) {
+                    for ($i = 0; $i -lt $searchRows.Count; $i++) {
+                        $parts = $searchRows[$i] -split "`t", 4
+                        if ($parts.Count -ge 4 -and $parts[0] -and $parts[1]) {
+                            $resultType = Get-MPVStreamSearchType -Id $parts[1] -IeKey $parts[2] -WebpageUrl $parts[3]
                             $index = $choices.Count
                             $choices.Add($index, [ordered]@{
-                                    Title = $parts[0]
-                                    ID    = $parts[1]
+                                    Title      = $parts[0]
+                                    ID         = $parts[1]
+                                    Type       = $resultType
+                                    Url        = $parts[3]
+                                    MenuTitle  = "[$resultType] $($parts[0])"
                                 })
                         }
                     }
 
-                    $TitleArray = $choices.Values.Title 
+                    $TitleArray = $choices.Values.MenuTitle 
                     if ($TitleArray) {
                         if (-not (Get-Command Show-Menu -ErrorAction SilentlyContinue)) {
                             Write-Warning "Show-Menu function not found. Using first result."
                             $resultIndex = 0
                         } else {
-                            $resultIndex = Show-Menu -Options $TitleArray -Title "Select a Playlist" -ReturnIndex 
+                            $resultIndex = Show-Menu -Options $TitleArray -Title "Playlist Results: $Url" -ReturnIndex 
                         }
                         if ($null -eq $resultIndex) { return }
 
-                        $selectedID = $choices[$resultIndex].ID
-                        $targetUrl = "https://www.youtube.com/playlist?list=$selectedID"
-                        Write-Host "Match [Playlist]: $($choices[$resultIndex].Title)" -ForegroundColor Cyan 
+                        $targetUrl = $choices[$resultIndex].Url
+                        Write-Host "Match [$($choices[$resultIndex].Type)]: $($choices[$resultIndex].Title)" -ForegroundColor Cyan 
                     } else { return }
                 } else {
-                    # Standard Video Search
-                    $searchUrl = "ytsearch$MaxResults`:$Url"
-                    $ytdlArgs = @($searchUrl, '--print', '%(title)s`t%(id)s', '--flat-playlist', '--no-playlist')
+                    # Standard mixed search: videos, playlists, and channels.
+                    $searchUrl = "https://www.youtube.com/results?search_query=$encodedQuery"
+                    $ytdlArgs = @($searchUrl, '--print', "%(title)s`t%(id)s`t%(ie_key)s`t%(webpage_url)s", '--flat-playlist', '--playlist-items', "1:$MaxResults")
                     if ($finalCookiePath) { $ytdlArgs += "--cookies", $finalCookiePath }
                     $SearchResult = yt-dlp @ytdlArgs 
+                    if ($LASTEXITCODE -is [int] -and $LASTEXITCODE -ne 0) { throw "yt-dlp exited with code $LASTEXITCODE" }
+                    $searchRows = @($SearchResult)
                     
                     $choices = [ordered]@{}
 
-                    for ($i = 0; $i -lt $SearchResult.Count; $i++) {
-                        $parts = $SearchResult[$i] -split "`t", 2
-                        if ($parts.Count -eq 2 -and $parts[0] -and $parts[1]) {
+                    for ($i = 0; $i -lt $searchRows.Count; $i++) {
+                        $parts = $searchRows[$i] -split "`t", 4
+                        if ($parts.Count -ge 4 -and $parts[0] -and $parts[1]) {
+                            $resultType = Get-MPVStreamSearchType -Id $parts[1] -IeKey $parts[2] -WebpageUrl $parts[3]
                             $index = $choices.Count
                             $choices.Add($index, [ordered]@{
-                                    Title = $parts[0]
-                                    ID    = $parts[1]
+                                    Title      = $parts[0]
+                                    ID         = $parts[1]
+                                    Type       = $resultType
+                                    Url        = $parts[3]
+                                    MenuTitle  = "[$resultType] $($parts[0])"
                                 })
                         }
                     }
-                    $TitleArray = $choices.Values.Title
+                    $TitleArray = $choices.Values.MenuTitle
                     if ($TitleArray) {
                         if (-not (Get-Command Show-Menu -ErrorAction SilentlyContinue)) {
                             Write-Warning "Show-Menu function not found. Using first result."
                             $resultIndex = 0
                         } else {
-                            $resultIndex = Show-Menu -Options $TitleArray -Title "Select a Video" -ReturnIndex
+                            $resultIndex = Show-Menu -Options $TitleArray -Title "Search Results: $Url" -ReturnIndex
                         }
                         if ($null -eq $resultIndex) { return }
 
-                        $targetUrl = "https://www.youtube.com/watch?v=$($choices[$resultIndex].ID)" 
-                        Write-Host "Match [Video]: $($choices[$resultIndex].Title)" -ForegroundColor Cyan 
+                        $targetUrl = $choices[$resultIndex].Url 
+                        Write-Host "Match [$($choices[$resultIndex].Type)]: $($choices[$resultIndex].Title)" -ForegroundColor Cyan 
                     } else { return }
                 }
             } catch {
@@ -380,6 +399,24 @@ function Join-NativeArgument {
         if ($_ -notmatch '[\s"]') { return $_ }
         '"' + ($_ -replace '"', '\"') + '"'
     }) -join ' '
+}
+
+function Get-MPVStreamSearchType {
+    param(
+        [string]$Id,
+        [string]$IeKey,
+        [string]$WebpageUrl
+    )
+
+    if ($WebpageUrl -match '/playlist\?list=' -or $Id -like 'PL*' -or $Id -like 'UU*') {
+        return 'Playlist'
+    }
+
+    if ($WebpageUrl -match '/(?:channel|c|user|@)' -or $Id -like 'UC*' -or $IeKey -eq 'YoutubeTab') {
+        return 'Channel'
+    }
+
+    return 'Video'
 }
 
 Export-ModuleMember -Function Start-MPVStream -Alias play 
