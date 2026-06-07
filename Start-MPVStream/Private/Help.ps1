@@ -20,9 +20,10 @@ function Write-MPVStreamHelp {
     Write-Host "    $("{0,-22}" -f "-Search, -s") Search YouTube instead of direct URL" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Playlist, -p") Search for playlists only" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-First") Play first search result without picker" -ForegroundColor $cDesc 
-    Write-Host "    $("{0,-22}" -f "-Type <type>") Filter search results (Video, Playlist, Channel)" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-Type <type>") Filter mixed results (Video, Playlist, Channel)" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-MaxResults, -max <num>") Number of search results (1-50, default: 10)" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-ReversePlaylist, -r") Reverse playlist order" -ForegroundColor $cDesc 
+    Write-Host "`nConfiguration" -ForegroundColor White 
     Write-Host "    $("{0,-22}" -f "-CookiePath, -c <path>") Path to cookie file (saved persistently)" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Config, --config") Interactive persistent configuration" -ForegroundColor $cDesc 
     Write-Host "`nExamples" -ForegroundColor White 
