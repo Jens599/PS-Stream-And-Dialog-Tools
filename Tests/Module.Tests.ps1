@@ -9,7 +9,7 @@ $moduleSources = @(
     Join-Path $repoRoot 'Add-Path\Add-Path.psm1'
     Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psm1'
     Join-Path $repoRoot 'ytm-dl\ytm-dl.psm1'
-)
+) + @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'Start-MPVStream\Private') -Filter '*.ps1' | Select-Object -ExpandProperty FullName)
 
 Describe 'PowerShell module manifests' {
     It 'all manifests parse successfully' {
@@ -170,28 +170,78 @@ Describe 'Start-MPVStream behavior' {
         }
     }
 
+    It 'applies direct playback flags and aliases' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig { Get-MPVStreamDefaultConfig }
+            function Add-MPVStreamHistoryItem { }
+            function mpv { $script:mpvArgs = $args }
+
+            Start-MPVStream -u 'https://example.test/direct' -sz Medium -f best -a -l -h -b -r -ns -ma '--force-window=yes'
+
+            ($script:mpvArgs -contains '--terminal=yes') | Should Be $false
+            ($script:mpvArgs -contains '--geometry=1280x720-10-10') | Should Be $true
+            ($script:mpvArgs -contains '--autofit=1280x720') | Should Be $true
+            ($script:mpvArgs -contains '--ytdl-format=bestvideo+bestaudio/best') | Should Be $true
+            ($script:mpvArgs -contains '--no-video') | Should Be $true
+            ($script:mpvArgs -contains '--loop=inf') | Should Be $true
+            ($script:mpvArgs -contains '--hwdec=auto') | Should Be $true
+            ($script:mpvArgs -contains '--ytdl-raw-options=playlist-items=1-') | Should Be $true
+            ($script:mpvArgs -contains '--ytdl-raw-options=playlist-reverse=') | Should Be $true
+            ($script:mpvArgs -contains '--slang=en') | Should Be $false
+            ($script:mpvArgs -contains '--force-window=yes') | Should Be $true
+            $script:mpvArgs[-1] | Should Be 'https://example.test/direct'
+
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
+            Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Variable mpvArgs -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'applies search flags and aliases' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig { Get-MPVStreamDefaultConfig }
+            function mpv { }
+            function yt-dlp {
+                $script:ytdlpArgs = $args
+                return @(
+                    "Video Result`tvideo123`tYoutube`thttps://www.youtube.com/watch?v=video123",
+                    "Playlist Result`tPL123`tYoutubeTab`thttps://www.youtube.com/playlist?list=PL123"
+                )
+            }
+            function Select-MPVStreamSearchResult { throw 'Selector should not be called with -fi.' }
+
+            Start-MPVStream 'query' -s -p -fi -t Playlist -max 7 -dr
+
+            $script:ytdlpArgs[0] | Should Be 'https://www.youtube.com/results?search_query=query&sp=EgIQAw%3D%3D'
+            $script:ytdlpArgs[5] | Should Be '1:7'
+
+            Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
+            Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
+            Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Variable ytdlpArgs -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
     It 'resolves cookie paths through the cookie helper' {
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 
         InModuleScope Start-MPVStream {
-            $config = Get-MPVStreamDefaultConfig
-            $cookie = Join-Path $env:TEMP 'start-mpvstream-test-cookies.txt'
+            $testRoot = Join-Path $env:TEMP 'start-mpvstream-cookie-root'
+            New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
+            $cookie = Join-Path $testRoot 'cookies.txt'
             Set-Content -LiteralPath $cookie -Value '# cookies' -Encoding UTF8
 
-            function Save-MPVStreamConfig {
-                param([pscustomobject]$Config)
-                $script:savedCookiePath = $Config.cookiePath
-            }
-
-            $resolved = Resolve-MPVStreamCookiePath -ConfigData $config -CookiePath $cookie -ScriptRoot $PSScriptRoot
+            $config = Get-MPVStreamDefaultConfig
+            $resolved = Resolve-MPVStreamCookiePath -ConfigData $config -ScriptRoot $testRoot
 
             $resolved | Should Be $cookie
-            $config.cookiePath | Should Be $cookie
-            $script:savedCookiePath | Should Be $cookie
+            $config.cookiePath | Should Be $null
 
-            Remove-Item Function:\Save-MPVStreamConfig -ErrorAction SilentlyContinue
-            Remove-Item -LiteralPath $cookie -ErrorAction SilentlyContinue
-            Remove-Variable savedCookiePath -Scope Script -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $testRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 
