@@ -87,18 +87,21 @@ function Start-MPVStream {
         }
         
         # --- Cookie Configuration ---
-        $configFile = "$env:USERPROFILE\.mpvstream-config.json"
+        $configDir = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Start-MPVStream'
+        $configFile = Join-Path $configDir 'config.json'
+        $legacyConfigFile = Join-Path $env:USERPROFILE '.mpvstream-config.json'
         $finalCookiePath = $null
         
         # Read from config file if it exists
-        if (Test-Path $configFile -PathType Leaf) {
+        $configFileToRead = if (Test-Path $configFile -PathType Leaf) { $configFile } elseif (Test-Path $legacyConfigFile -PathType Leaf) { $legacyConfigFile } else { $null }
+        if ($configFileToRead) {
             try {
-                $config = Get-Content $configFile -Raw | ConvertFrom-Json
+                $config = Get-Content -LiteralPath $configFileToRead -Raw | ConvertFrom-Json
                 if ($config.cookiePath -and (Test-Path $config.cookiePath -PathType Leaf)) {
                     $finalCookiePath = $config.cookiePath
                 }
             } catch {
-                Write-Warning "Failed to read config file: $configFile"
+                Write-Warning "Failed to read config file: $configFileToRead"
             }
         }
         
@@ -109,6 +112,9 @@ function Start-MPVStream {
             
             # Save to config file
             try {
+                if (-not (Test-Path $configDir -PathType Container)) {
+                    New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+                }
                 $config = @{ cookiePath = $finalCookiePath } | ConvertTo-Json
                 $config | Out-File -FilePath $configFile -Encoding UTF8
                 Write-Host "→ Cookie path saved to: $configFile" -ForegroundColor Green
@@ -165,17 +171,12 @@ function Start-MPVStream {
 
         # --- 2. URL Validation ---
         if (-not $Search) {
-            # Basic URL validation for direct playback
-            if ($Url -notmatch '^https?://') {
+            $parsedUri = $null
+            if (-not [uri]::TryCreate($Url, [System.UriKind]::Absolute, [ref]$parsedUri) -or $parsedUri.Scheme -notin @('http', 'https')) {
                 Write-Error "Invalid URL format. URLs should start with http:// or https://"
                 return
             }
-            
-            # Sanitize URL to prevent command injection
-            $targetUrl = $Url -replace '[;&|`$()]', ''
-            if ($targetUrl -ne $Url) {
-                Write-Warning "URL contained potentially dangerous characters and has been sanitized."
-            }
+            $targetUrl = $Url
         } else {
             $targetUrl = $Url
         }
@@ -187,7 +188,7 @@ function Start-MPVStream {
                 if ($Playlist) {
                     # Search for Playlists specifically using the 'sp' parameter 
                     $searchUrl = "https://www.youtube.com/results?search_query=$encodedQuery&sp=EgIQAw%3D%3D"
-                    $ytdlArgs = @($searchUrl, '--get-id', '--get-title', '--flat-playlist', '--playlist-items', "1:$MaxResults")
+                    $ytdlArgs = @($searchUrl, '--print', '%(title)s`t%(id)s', '--flat-playlist', '--playlist-items', "1:$MaxResults")
                     if ($finalCookiePath) { $ytdlArgs += "--cookies", $finalCookiePath }
                     $SearchResult = yt-dlp @ytdlArgs 
 
@@ -196,16 +197,17 @@ function Start-MPVStream {
                         return
                     }
 
-                    Write-Host "Search results found: $($SearchResult.Count / 2)" -ForegroundColor Yellow 
+                    Write-Host "Search results found: $($SearchResult.Count)" -ForegroundColor Yellow 
 
                     $choices = [ordered]@{}
 
-                    for ($i = 0; $i -lt $SearchResult.Count; $i += 2) {
-                        if ($i + 1 -lt $SearchResult.Count) {
-                            $index = $i / 2
+                    for ($i = 0; $i -lt $SearchResult.Count; $i++) {
+                        $parts = $SearchResult[$i] -split "`t", 2
+                        if ($parts.Count -eq 2 -and $parts[0] -and $parts[1]) {
+                            $index = $choices.Count
                             $choices.Add($index, [ordered]@{
-                                    Title = $SearchResult[$i]
-                                    ID    = $SearchResult[$i + 1]
+                                    Title = $parts[0]
+                                    ID    = $parts[1]
                                 })
                         }
                     }
@@ -227,18 +229,19 @@ function Start-MPVStream {
                 } else {
                     # Standard Video Search
                     $searchUrl = "ytsearch$MaxResults`:$Url"
-                    $ytdlArgs = @($searchUrl, '--get-id', '--get-title', '--flat-playlist', '--no-playlist')
+                    $ytdlArgs = @($searchUrl, '--print', '%(title)s`t%(id)s', '--flat-playlist', '--no-playlist')
                     if ($finalCookiePath) { $ytdlArgs += "--cookies", $finalCookiePath }
                     $SearchResult = yt-dlp @ytdlArgs 
                     
                     $choices = [ordered]@{}
 
-                    for ($i = 0; $i -lt $SearchResult.Count; $i += 2) {
-                        if ($i + 1 -lt $SearchResult.Count) {
-                            $index = $i / 2
+                    for ($i = 0; $i -lt $SearchResult.Count; $i++) {
+                        $parts = $SearchResult[$i] -split "`t", 2
+                        if ($parts.Count -eq 2 -and $parts[0] -and $parts[1]) {
+                            $index = $choices.Count
                             $choices.Add($index, [ordered]@{
-                                    Title = $SearchResult[$i]
-                                    ID    = $SearchResult[$i + 1]
+                                    Title = $parts[0]
+                                    ID    = $parts[1]
                                 })
                         }
                     }
@@ -322,7 +325,7 @@ function Start-MPVStream {
         if ($Background) {
             try {
                 $processArgs = $mpvArgs + $targetUrl
-                Start-Process -FilePath "mpv" -ArgumentList $processArgs -ErrorAction Stop
+                Start-Process -FilePath "mpv" -ArgumentList (Join-NativeArgument $processArgs) -ErrorAction Stop
                 Write-Host "→ MPV started in background" -ForegroundColor Green
             } catch {
                 Write-Error "Failed to start MPV in background: $($_.Exception.Message)"
@@ -346,12 +349,12 @@ function Write-MPVStreamHelp {
     Write-Host "   or: play -c <cookie-path> [config mode]" -ForegroundColor $cHead 
     Write-Host "`nPlayback Control" -ForegroundColor White 
     Write-Host "    $("{0,-22}" -f "-Size, -sz <mode>") Window (PIP, Small, Medium, Max)" -ForegroundColor $cDesc 
-    Write-Host "    $("{0,-22}" -f "-Format, -f <mode>") Quality (480p, 720p, 1080p, best, audio)" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-YtdlFormat, -f <mode>") Quality (480p, 720p, 1080p, best, audio)" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-AudioOnly, -a") Stream audio only" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Background, -b") Run in background process" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Loop, -l") Loop playback infinitely" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-HardwareAccel, -h") Enable hardware acceleration" -ForegroundColor $cDesc 
-    Write-Host "    $("{0,-22}" -f "-NoSessionId, -nosub") Disable session ID (--sid=1)" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-NoSubtitles, -nosub") Disable subtitle language preference" -ForegroundColor $cDesc 
     Write-Host "`nSearch Features" -ForegroundColor White 
     Write-Host "    $("{0,-22}" -f "-Search, -s") Search YouTube instead of direct URL" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Playlist, -p") Search for playlists only" -ForegroundColor $cDesc 
@@ -365,6 +368,18 @@ function Write-MPVStreamHelp {
     Write-Host "    play 'https://youtu.be/dQw4w9WgXcQ' -sz Small -f 720p" -ForegroundColor $cDesc 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' -c cookies.txt" -ForegroundColor $cDesc 
     Write-Host "    play -c .\Downloads\Compressed\cookies.txt" -ForegroundColor $cDesc 
+}
+
+function Join-NativeArgument {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Argument
+    )
+
+    ($Argument | ForEach-Object {
+        if ($_ -notmatch '[\s"]') { return $_ }
+        '"' + ($_ -replace '"', '\"') + '"'
+    }) -join ' '
 }
 
 Export-ModuleMember -Function Start-MPVStream -Alias play 

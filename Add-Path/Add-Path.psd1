@@ -9,7 +9,7 @@
     CompatiblePSEditions = @('Desktop', 'Core')
 
     # ID used to uniquely identify this module
-    GUID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+    GUID = '7747f8e8-8752-43bb-85a6-40f4d1f75bdc'
 
     # Author of this module
     Author = 'PowerShell User'

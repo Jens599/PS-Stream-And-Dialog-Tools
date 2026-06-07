@@ -6,10 +6,11 @@
     CompanyName       = 'Unknown'
     Copyright         = '(c) workj. All rights reserved.'
     Description       = 'YouTube Music downloader wrapper'
-    FunctionsToExport = '*'
-    CmdletsToExport   = '*'
-    VariablesToExport = '*'
-    AliasesToExport   = '*'
+    PowerShellVersion = '5.1'
+    FunctionsToExport = @('Invoke-YtmDownload')
+    CmdletsToExport   = @()
+    VariablesToExport = @()
+    AliasesToExport   = @('ydl', 'ytm-dl')
     PrivateData       = @{
         PSData = @{
     

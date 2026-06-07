@@ -1,7 +1,7 @@
 @{
     RootModule        = 'Start-MPVStream.psm1'
     ModuleVersion     = '0.1.0'
-    GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+    GUID              = 'ec55bab7-93a5-4e9f-b244-6a9f56ff58a4'
     Author            = 'PowerShell User'
     CompanyName       = ''
     Copyright         = '(c) 2024 PowerShell User. All rights reserved.'

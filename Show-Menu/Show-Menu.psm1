@@ -13,43 +13,6 @@ function Show-Menu {
         [switch]$ReturnIndex
     )
 
-    # Show help if no parameters provided
-    if (-not $Options -or $Options.Count -eq 0) {
-        Write-Host "`n=== Show-Menu Help ===" -ForegroundColor Cyan
-        Write-Host ""
-        Write-Host "USAGE:" -ForegroundColor Yellow
-        Write-Host "    Show-Menu -Options <string[]> [-Title <string>] [-ReturnIndex]"
-        Write-Host ""
-        Write-Host "PARAMETERS:" -ForegroundColor Yellow
-        Write-Host "    -Options    Array of menu options to display"
-        Write-Host "    -Title      Menu title (default: 'Use Up/Down arrows and press Enter:')"
-        Write-Host "    -ReturnIndex If specified, returns the index (0-based) instead of the option value"
-        Write-Host ""
-        Write-Host "EXAMPLES:" -ForegroundColor Yellow
-        Write-Host "    # Basic usage"
-        Write-Host "    `$choices = 'Restart Service', 'Stop Service', 'Check Status', 'Exit'"
-        Write-Host "    `$result = Show-Menu -Options `$choices"
-        Write-Host ""
-        Write-Host "    # With custom title"
-        Write-Host "    `$choices = 'Option 1', 'Option 2', 'Option 3'"
-        Write-Host "    `$result = Show-Menu -Options `$choices -Title 'Server Management'"
-        Write-Host ""
-        Write-Host "    # Direct usage"
-        Write-Host "    `$result = Show-Menu -Options 'Yes', 'No', 'Cancel' -Title 'Confirm Action'"
-        Write-Host ""
-        Write-Host "    # Return index instead of value"
-        Write-Host "    `$choices = 'Option 1', 'Option 2', 'Option 3'"
-        Write-Host "    `$index = Show-Menu -Options `$choices -ReturnIndex"
-        Write-Host "    `$selectedOption = `$choices[`$index]"
-        Write-Host ""
-        Write-Host "DESCRIPTION:" -ForegroundColor Yellow
-        Write-Host "    Displays an interactive menu where users can navigate using arrow keys"
-        Write-Host "    and select an option by pressing Enter. Returns the selected option as a string"
-        Write-Host "    or the index (0-based) if -ReturnIndex is specified."
-        Write-Host ""
-        return
-    }
-
     $selectedIndex = 0
     $key = $null
     $cursorVisible = $false

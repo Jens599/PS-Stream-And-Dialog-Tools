@@ -107,10 +107,13 @@ function Add-Path {
                 # Broadcast system-wide environment change
                 [System.Environment]::SetEnvironmentVariable('PATH', $newPath, [System.EnvironmentVariableTarget]::Machine)
             } else {
-                # Update current session and broadcast user environment change
+                # Update persisted user environment. Rebuild the process PATH from machine + user entries below.
                 [System.Environment]::SetEnvironmentVariable('PATH', $newPath, [System.EnvironmentVariableTarget]::User)
-                $env:PATH = $newPath
             }
+
+            $machinePath = [System.Environment]::GetEnvironmentVariable('PATH', [System.EnvironmentVariableTarget]::Machine)
+            $userPath = [System.Environment]::GetEnvironmentVariable('PATH', [System.EnvironmentVariableTarget]::User)
+            $env:PATH = (@($machinePath, $userPath) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ';'
             
             Write-Host "Successfully added '$normalizedPath' to PATH ($Scope scope)." -ForegroundColor Green
             Write-Host "Changes will take effect in new PowerShell sessions." -ForegroundColor Yellow

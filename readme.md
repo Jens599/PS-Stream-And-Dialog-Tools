@@ -4,6 +4,15 @@ A collection of custom PowerShell modules for enhanced productivity and media pl
 
 ## Available Modules
 
+### Add-Path
+**Version:** 1.0.0  
+**Description:** Permanently add a directory to the user or machine PATH.
+
+```powershell
+Add-Path -Path 'C:\Tools\MyTool'
+Add-Path -Path 'C:\Tools\MyTool' -Scope Machine
+```
+
 ### Show-Menu
 **Version:** 0.1.0  
 **Description:** Interactive menu system for PowerShell with keyboard navigation
@@ -76,25 +85,47 @@ play -c 'C:\Users\username\Downloads\cookies.txt'
 play 'https://www.youtube.com/playlist?list=PLW8XZTagL0oJhk71Ip3rIzHOFY3Edw2pw'
 ```
 
+### ytm-dl
+**Version:** 0.0.1  
+**Aliases:** `ydl`, `ytm-dl`  
+**Description:** YouTube Music audio downloader wrapper around `yt-dlp`.
+
+#### Dependencies
+- `yt-dlp` - Required for downloads
+- `aria2c` - Optional, for faster downloads
+- `picard` - Optional, launched after downloads for tagging
+
+#### Usage Examples
+```powershell
+Invoke-YtmDownload 'https://music.youtube.com/watch?v=...'
+Invoke-YtmDownload -Url 'C:\music\urls.txt' -OutputDir 'D:\MyMusic' -Parallel 4
+'url1', 'url2' | Invoke-YtmDownload -Parallel 2
+```
+
 ## Installation
 
-1. Clone this repository to your PowerShell modules directory:
+1. Clone this repository, then copy or symlink each module directory into a path listed in `$env:PSModulePath`, such as `$env:USERPROFILE\Documents\PowerShell\Modules`:
    ```powershell
-   git clone <repository-url> $env:USERPROFILE\Documents\PowerShell\Modules
+   git clone <repository-url> .\PS-Stream-And-Dialog-Tools
+   Copy-Item .\PS-Stream-And-Dialog-Tools\Show-Menu $env:USERPROFILE\Documents\PowerShell\Modules -Recurse
+   Copy-Item .\PS-Stream-And-Dialog-Tools\Start-MPVStream $env:USERPROFILE\Documents\PowerShell\Modules -Recurse
+   Copy-Item .\PS-Stream-And-Dialog-Tools\Add-Path $env:USERPROFILE\Documents\PowerShell\Modules -Recurse
+   Copy-Item .\PS-Stream-And-Dialog-Tools\ytm-dl $env:USERPROFILE\Documents\PowerShell\Modules -Recurse
    ```
 
-2. Import modules in your PowerShell profile:
+2. Load every module from your PowerShell profile by dot-sourcing the project loader:
    ```powershell
-   Import-Module Show-Menu
-   Import-Module Start-MPVStream
+   '. C:\path\to\PS-Stream-And-Dialog-Tools\Profile\PS-Stream-And-Dialog-Tools.profile.ps1' | Add-Content -Path $PROFILE
    ```
+
+   Open a new PowerShell session, or run the same dot-source command directly in your current session.
 
 ## System Requirements
 
 - PowerShell 5.1 or later
 - Windows operating system
 - For Start-MPVStream: mpv media player installed and in PATH
-- For YouTube search: yt-dlp installed and in PATH
+- For Start-MPVStream search and ytm-dl downloads: yt-dlp installed and in PATH
 
 ## Module Dependencies
 

@@ -17,4 +17,10 @@
 !Add-Path/
 !Add-Path/*
 
+!Tests/
+!Tests/*
+
+!Profile/
+!Profile/*
+
 !readme.md
