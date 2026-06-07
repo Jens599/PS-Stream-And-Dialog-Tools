@@ -28,9 +28,17 @@ A comprehensive media player wrapper that provides streamlined playback experien
 
 #### Features
 - Direct URL playback
-- YouTube video and playlist search
+- YouTube video and playlist search with duration, uploader, and view metadata when available
+- First-result playback for searches without opening the selector
+- Search result filtering by video, playlist, or channel
+- Clipboard playback with `-Clipboard`
+- Playback history with `-History` and `-Last`
 - Multiple window sizes (PIP, Small, Medium, Max)
 - Quality selection (480p, 720p, 1080p, best, audio-only)
+- Custom mpv argument passthrough
+- Dry-run command preview without starting mpv
+- Configurable preferred subtitle language
+- Configurable player executable path, including `mpv`, `mpvnet.com`, or a full `.exe`/`.com` path
 - Background playback mode
 - Hardware acceleration support
 - Playlist control (reverse order)
@@ -47,17 +55,36 @@ play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
 # YouTube search
 play 'never gonna give you up' -s
 
+# Play the first YouTube search result immediately
+play 'never gonna give you up' -s -First
+
+# Play a copied URL or replay recent streams
+play -Clipboard
+play -Last
+play -History
+
+# Search videos only
+play 'live coding' -s -Type Video
+
 # Search for playlists with audio-only
 play 'lofi beats' -s -p -f audio
 
 # Custom size and quality
 play 'https://youtu.be/dQw4w9WgXcQ' -sz Small -f 720p
 
+# Preview a custom mpv launch command
+play 'https://youtu.be/dQw4w9WgXcQ' -MpvArgument '--speed=1.25' -DryRun
+
+# Prefer specific subtitle languages
+play 'https://youtu.be/dQw4w9WgXcQ' -SubtitleLanguage en,ja
+
 # Configure cookie path (saved persistently)
 play -c 'C:\Users\username\Downloads\cookies.txt'
 
 # Configure defaults and search UI provider
 play --config
+
+# In config, set Player Path to mpvnet.com or a full player executable path if mpv is not in PATH
 
 # Play with authenticated content using saved cookie path
 play 'https://www.youtube.com/playlist?list=PLW8XZTagL0oJhk71Ip3rIzHOFY3Edw2pw'
