@@ -46,6 +46,13 @@ function Start-MPVStream {
         [ValidateSet('Video', 'Playlist', 'Channel')]
         [string]$Type,
 
+        [Parameter()]
+        [Alias('mpvarg')]
+        [string[]]$MpvArgument,
+
+        [Parameter()]
+        [switch]$DryRun,
+
         [Alias('a')]
         [switch]$AudioOnly,
 
@@ -282,12 +289,17 @@ function Start-MPVStream {
 
         # --- 4. Format Mapping ---
         # --- 5. Argument Construction ---
-        $mpvArgs = New-MPVStreamMpvArgument -Size $Size -YtdlFormat $YtdlFormat -CookiePath $finalCookiePath -AudioOnly:$AudioOnly -Loop:$Loop -HardwareAccel:$HardwareAccel -Background:$Background -ReversePlaylist:$ReversePlaylist -NoSubtitles:$NoSubtitles
+        $mpvArgs = New-MPVStreamMpvArgument -Size $Size -YtdlFormat $YtdlFormat -CookiePath $finalCookiePath -AudioOnly:$AudioOnly -Loop:$Loop -HardwareAccel:$HardwareAccel -Background:$Background -ReversePlaylist:$ReversePlaylist -NoSubtitles:$NoSubtitles -CustomArgument $MpvArgument
 
         
         
         Write-Host "→ Launching:" -ForegroundColor Green 
         Write-Host "    mpv $($mpvArgs -join ' ') $targetUrl" -ForegroundColor Yellow 
+
+        if ($DryRun) {
+            Write-Host "→ Dry run: MPV was not started" -ForegroundColor Cyan
+            return
+        }
 
         # --- 6. Execution ---
         if ($Background) {
@@ -322,6 +334,8 @@ function Write-MPVStreamHelp {
     Write-Host "    $("{0,-22}" -f "-Background, -b") Run in background process" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Loop, -l") Loop playback infinitely" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-HardwareAccel, -h") Enable hardware acceleration" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-MpvArgument <arg>") Extra mpv argument(s) appended to launch" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-DryRun") Show final command without starting mpv" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-NoSubtitles, -nosub") Disable subtitle language preference" -ForegroundColor $cDesc 
     Write-Host "`nSearch Features" -ForegroundColor White 
     Write-Host "    $("{0,-22}" -f "-Search, -s") Search YouTube instead of direct URL" -ForegroundColor $cDesc 
@@ -338,6 +352,7 @@ function Write-MPVStreamHelp {
     Write-Host "    play 'never gonna give you up' -s -First" -ForegroundColor $cDesc 
     Write-Host "    play 'live coding' -s -Type Video" -ForegroundColor $cDesc 
     Write-Host "    play 'lofi beats' -s -p -f audio" -ForegroundColor $cDesc 
+    Write-Host "    play 'https://youtu.be/dQw4w9WgXcQ' -MpvArgument '--speed=1.25' -DryRun" -ForegroundColor $cDesc 
     Write-Host "    play 'https://youtu.be/dQw4w9WgXcQ' -sz Small -f 720p" -ForegroundColor $cDesc 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' -c cookies.txt" -ForegroundColor $cDesc 
     Write-Host "    play -c .\Downloads\Compressed\cookies.txt" -ForegroundColor $cDesc 
@@ -817,7 +832,9 @@ function New-MPVStreamMpvArgument {
 
         [switch]$ReversePlaylist,
 
-        [switch]$NoSubtitles
+        [switch]$NoSubtitles,
+
+        [string[]]$CustomArgument
     )
 
     $formatMap = @{
@@ -862,6 +879,10 @@ function New-MPVStreamMpvArgument {
 
     if (-not $NoSubtitles) {
         $arguments += '--slang=en'
+    }
+
+    if ($CustomArgument) {
+        $arguments += $CustomArgument
     }
 
     return $arguments

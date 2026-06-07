@@ -33,6 +33,8 @@ A comprehensive media player wrapper that provides streamlined playback experien
 - Search result filtering by video, playlist, or channel
 - Multiple window sizes (PIP, Small, Medium, Max)
 - Quality selection (480p, 720p, 1080p, best, audio-only)
+- Custom mpv argument passthrough
+- Dry-run command preview without starting mpv
 - Background playback mode
 - Hardware acceleration support
 - Playlist control (reverse order)
@@ -60,6 +62,9 @@ play 'lofi beats' -s -p -f audio
 
 # Custom size and quality
 play 'https://youtu.be/dQw4w9WgXcQ' -sz Small -f 720p
+
+# Preview a custom mpv launch command
+play 'https://youtu.be/dQw4w9WgXcQ' -MpvArgument '--speed=1.25' -DryRun
 
 # Configure cookie path (saved persistently)
 play -c 'C:\Users\username\Downloads\cookies.txt'

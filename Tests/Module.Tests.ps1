@@ -130,6 +130,8 @@ Describe 'Start-MPVStream behavior' {
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Config' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'MpvArgument' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'DryRun' | Should Be $true
 
         InModuleScope Start-MPVStream {
             $config = Get-MPVStreamDefaultConfig
@@ -255,7 +257,7 @@ Describe 'Start-MPVStream behavior' {
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 
         InModuleScope Start-MPVStream {
-            $mpvArgs = @(New-MPVStreamMpvArgument -Size PIP -YtdlFormat '720p' -CookiePath 'C:\Temp\cookies.txt' -AudioOnly -Loop -HardwareAccel -ReversePlaylist)
+            $mpvArgs = @(New-MPVStreamMpvArgument -Size PIP -YtdlFormat '720p' -CookiePath 'C:\Temp\cookies.txt' -AudioOnly -Loop -HardwareAccel -ReversePlaylist -CustomArgument @('--speed=1.25', '--volume=70'))
 
             ($mpvArgs -contains '--terminal=yes') | Should Be $true
             ($mpvArgs -contains '--geometry=320x180-10-10') | Should Be $true
@@ -271,12 +273,32 @@ Describe 'Start-MPVStream behavior' {
             ($mpvArgs -contains '--ytdl-raw-options=cookies=C:\Temp\cookies.txt') | Should Be $true
             ($mpvArgs -contains '--ytdl-raw-options=no-download-archive=') | Should Be $true
             ($mpvArgs -contains '--slang=en') | Should Be $true
+            ($mpvArgs -contains '--speed=1.25') | Should Be $true
+            ($mpvArgs -contains '--volume=70') | Should Be $true
 
             $backgroundArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat audio -Background -NoSubtitles)
             ($backgroundArgs -contains '--terminal=yes') | Should Be $false
             ($backgroundArgs -contains '--slang=en') | Should Be $false
             ($backgroundArgs -contains '--autofit=854x480') | Should Be $true
             ($backgroundArgs -contains '--ytdl-format=bestaudio/best') | Should Be $true
+        }
+    }
+
+    It 'does not start mpv during dry run' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig {
+                Get-MPVStreamDefaultConfig
+            }
+
+            function mpv {
+                throw 'mpv should not be started during dry run.'
+            }
+
+            Start-MPVStream 'https://example.test/video' -DryRun -MpvArgument '--speed=1.25'
+
+            Remove-Item Function:\mpv -ErrorAction SilentlyContinue
         }
     }
 
