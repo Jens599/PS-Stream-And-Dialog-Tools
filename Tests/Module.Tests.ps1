@@ -361,8 +361,13 @@ Describe 'Start-MPVStream behavior' {
             $backgroundArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat audio -Background -NoSubtitles)
             ($backgroundArgs -contains '--terminal=yes') | Should Be $false
             ($backgroundArgs -contains '--slang=en') | Should Be $false
+            ($backgroundArgs -contains '--geometry=854x480-10-10') | Should Be $true
             ($backgroundArgs -contains '--autofit=854x480') | Should Be $true
             ($backgroundArgs -contains '--ytdl-format=bestaudio/best') | Should Be $true
+
+            $mediumArgs = @(New-MPVStreamMpvArgument -Size Medium -YtdlFormat '480p')
+            ($mediumArgs -contains '--geometry=1280x720-10-10') | Should Be $true
+            ($mediumArgs -contains '--autofit=1280x720') | Should Be $true
 
             $subtitleArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat audio -SubtitleLanguage @('en', 'ja'))
             ($subtitleArgs -contains '--slang=en,ja') | Should Be $true

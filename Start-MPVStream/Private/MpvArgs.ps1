@@ -20,6 +20,12 @@ function Resolve-MPVStreamPlayer {
 
     $candidates += @('mpv', 'mpvnet.com', 'mpvnet.exe')
 
+    $localMpvNetDir = Join-Path $env:LOCALAPPDATA 'Programs\mpv.net'
+    $candidates += @(
+        (Join-Path $localMpvNetDir 'mpvnet.com'),
+        (Join-Path $localMpvNetDir 'mpvnet.exe')
+    )
+
     foreach ($candidate in $candidates) {
         if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
 
@@ -121,8 +127,14 @@ function New-MPVStreamMpvArgument {
             $arguments += '--no-border'
             $arguments += '--ontop'
         }
-        'Small' { $arguments += '--autofit=854x480' }
-        'Medium' { $arguments += '--autofit=1280x720' }
+        'Small' {
+            $arguments += '--geometry=854x480-10-10'
+            $arguments += '--autofit=854x480'
+        }
+        'Medium' {
+            $arguments += '--geometry=1280x720-10-10'
+            $arguments += '--autofit=1280x720'
+        }
         'Max' { $arguments += '--fullscreen' }
     }
 
