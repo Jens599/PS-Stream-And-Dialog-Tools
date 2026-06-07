@@ -177,6 +177,24 @@ Describe 'Start-MPVStream behavior' {
         }
     }
 
+    It 'formats search results as readable picker columns' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            $item = [pscustomobject]@{
+                Type      = 'Video'
+                Duration  = '31:58'
+                ViewCount = '345570'
+                Uploader  = 'Very Long Channel Name That Should Be Shortened'
+                Title     = 'The Greatest Sci-Fi Reinterpretation Ever Made'
+            }
+
+            $line = Format-MPVStreamSearchResultLine -Item $item -Index 2
+
+            $line | Should Match '^02\s+Video\s+31:58\s+345,570\s+Very Long Channel\.\.\.\s+The Greatest Sci-Fi Reinterpretation Ever Made$'
+        }
+    }
+
     It 'builds yt-dlp search arguments with metadata fields and cookies' {
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 
