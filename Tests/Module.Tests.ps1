@@ -103,7 +103,7 @@ Describe 'Start-MPVStream behavior' {
             Start-MPVStream 'only result' -Search -Size Small -YtdlFormat audio
 
             $script:ytdlpArgs[0] | Should Be 'https://www.youtube.com/results?search_query=only%20result'
-            $script:ytdlpArgs[2] | Should Be "%(title)s`t%(id)s`t%(ie_key)s`t%(webpage_url)s"
+            $script:ytdlpArgs[2] | Should Be "%(title)s`t%(id)s`t%(ie_key)s`t%(webpage_url)s`t%(duration_string)s`t%(uploader)s`t%(view_count)s"
             $script:menuOptions[0] | Should Be '[Channel] Creator'
             $script:menuOptions[1] | Should Be '[Video] Only Result'
             $script:menuOptions[2] | Should Be '[Playlist] Playlist Result'
@@ -144,6 +144,139 @@ Describe 'Start-MPVStream behavior' {
             Normalize-MPVStreamMenuProvider 'Show-Menu' | Should Be 'BasicPrompt'
             Normalize-MPVStreamMenuProvider 'Basic Prompt' | Should Be 'BasicPrompt'
             Normalize-MPVStreamMenuProvider 'not-real' | Should Be 'fzf'
+        }
+    }
+
+    It 'parses yt-dlp search rows into normalized menu items' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            $channel = ConvertFrom-MPVStreamSearchRow "Creator`tUC123`tYoutubeTab`thttps://www.youtube.com/channel/UC123"
+            $video = ConvertFrom-MPVStreamSearchRow "Only Result`tvideo123`tYoutube`thttps://www.youtube.com/watch?v=video123`t3:45`tExample Channel`t1234"
+            $playlist = ConvertFrom-MPVStreamSearchRow "Playlist Result`tPL123`tYoutubeTab`thttps://www.youtube.com/playlist?list=PL123"
+
+            $channel.Type | Should Be 'Channel'
+            $channel.MenuTitle | Should Be '[Channel] Creator'
+            $channel.Url | Should Be 'https://www.youtube.com/channel/UC123'
+
+            $video.Type | Should Be 'Video'
+            $video.Duration | Should Be '3:45'
+            $video.Uploader | Should Be 'Example Channel'
+            $video.ViewCount | Should Be '1234'
+            $video.MenuTitle | Should Be '[Video] Only Result | 3:45 | Example Channel | 1,234 views'
+
+            $playlist.Type | Should Be 'Playlist'
+            $playlist.MenuTitle | Should Be '[Playlist] Playlist Result'
+
+            ConvertFrom-MPVStreamSearchRow "missing`tfields" | Should Be $null
+            ConvertFrom-MPVStreamSearchRow "`tmissing-title`tYoutube`thttps://example.test" | Should Be $null
+        }
+    }
+
+    It 'builds yt-dlp search arguments with metadata fields and cookies' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            $args = New-MPVStreamYtdlpSearchArgument -EncodedQuery 'lofi%20beats' -Playlist -MaxResults 7 -CookiePath 'C:\Temp\cookies.txt'
+
+            $args[0] | Should Be 'https://www.youtube.com/results?search_query=lofi%20beats&sp=EgIQAw%3D%3D'
+            $args[1] | Should Be '--print'
+            $args[2] | Should Be "%(title)s`t%(id)s`t%(ie_key)s`t%(webpage_url)s`t%(duration_string)s`t%(uploader)s`t%(view_count)s"
+            $args[3] | Should Be '--flat-playlist'
+            $args[4] | Should Be '--playlist-items'
+            $args[5] | Should Be '1:7'
+            $args[6] | Should Be '--cookies'
+            $args[7] | Should Be 'C:\Temp\cookies.txt'
+        }
+    }
+
+    It 'plays the first search result without opening the selector' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig {
+                Get-MPVStreamDefaultConfig
+            }
+
+            function yt-dlp {
+                return @(
+                    "First Result`tfirst123`tYoutube`thttps://www.youtube.com/watch?v=first123`t1:00`tChannel One`t100",
+                    "Second Result`tsecond123`tYoutube`thttps://www.youtube.com/watch?v=second123`t2:00`tChannel Two`t200"
+                )
+            }
+
+            function Select-MPVStreamSearchResult {
+                throw 'Selector should not be called when -First is used.'
+            }
+
+            function mpv {
+                $script:mpvArgs = $args
+            }
+
+            Start-MPVStream 'first result' -Search -First -Size Small -YtdlFormat audio
+
+            $script:mpvArgs[0] | Should Be 'https://www.youtube.com/watch?v=first123'
+
+            Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
+            Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
+            Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Variable mpvArgs -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'filters search results by type' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function yt-dlp {
+                return @(
+                    "Creator`tUC123`tYoutubeTab`thttps://www.youtube.com/channel/UC123",
+                    "Only Result`tvideo123`tYoutube`thttps://www.youtube.com/watch?v=video123",
+                    "Playlist Result`tPL123`tYoutubeTab`thttps://www.youtube.com/playlist?list=PL123"
+                )
+            }
+
+            $videos = @(Search-MPVStreamYouTube -EncodedQuery 'query' -MaxResults 10 -Type Video)
+            $playlists = @(Search-MPVStreamYouTube -EncodedQuery 'query' -MaxResults 10 -Type Playlist)
+            $channels = @(Search-MPVStreamYouTube -EncodedQuery 'query' -MaxResults 10 -Type Channel)
+
+            $videos.Count | Should Be 1
+            $videos[0].Type | Should Be 'Video'
+            $playlists.Count | Should Be 1
+            $playlists[0].Type | Should Be 'Playlist'
+            $channels.Count | Should Be 1
+            $channels[0].Type | Should Be 'Channel'
+
+            Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'builds mpv arguments from playback options' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            $mpvArgs = @(New-MPVStreamMpvArgument -Size PIP -YtdlFormat '720p' -CookiePath 'C:\Temp\cookies.txt' -AudioOnly -Loop -HardwareAccel -ReversePlaylist)
+
+            ($mpvArgs -contains '--terminal=yes') | Should Be $true
+            ($mpvArgs -contains '--geometry=320x180-10-10') | Should Be $true
+            ($mpvArgs -contains '--autofit=320x180') | Should Be $true
+            ($mpvArgs -contains '--no-border') | Should Be $true
+            ($mpvArgs -contains '--ontop') | Should Be $true
+            ($mpvArgs -contains '--no-video') | Should Be $true
+            ($mpvArgs -contains '--loop=inf') | Should Be $true
+            ($mpvArgs -contains '--hwdec=auto') | Should Be $true
+            ($mpvArgs -contains '--ytdl-raw-options=playlist-items=1-') | Should Be $true
+            ($mpvArgs -contains '--ytdl-raw-options=playlist-reverse=') | Should Be $true
+            ($mpvArgs -contains '--ytdl-format=bestvideo[height<=720]+bestaudio/best') | Should Be $true
+            ($mpvArgs -contains '--ytdl-raw-options=cookies=C:\Temp\cookies.txt') | Should Be $true
+            ($mpvArgs -contains '--ytdl-raw-options=no-download-archive=') | Should Be $true
+            ($mpvArgs -contains '--slang=en') | Should Be $true
+
+            $backgroundArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat audio -Background -NoSubtitles)
+            ($backgroundArgs -contains '--terminal=yes') | Should Be $false
+            ($backgroundArgs -contains '--slang=en') | Should Be $false
+            ($backgroundArgs -contains '--autofit=854x480') | Should Be $true
+            ($backgroundArgs -contains '--ytdl-format=bestaudio/best') | Should Be $true
         }
     }
 

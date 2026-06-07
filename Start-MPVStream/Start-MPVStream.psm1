@@ -39,6 +39,13 @@ function Start-MPVStream {
         [Alias('p')]
         [switch]$Playlist,
 
+        [Parameter()]
+        [switch]$First,
+
+        [Parameter()]
+        [ValidateSet('Video', 'Playlist', 'Channel')]
+        [string]$Type,
+
         [Alias('a')]
         [switch]$AudioOnly,
 
@@ -204,40 +211,35 @@ function Start-MPVStream {
                 
                 if ($Playlist) {
                     # Search for Playlists specifically using the 'sp' parameter 
-                    $searchUrl = "https://www.youtube.com/results?search_query=$encodedQuery&sp=EgIQAw%3D%3D"
-                    $ytdlArgs = @($searchUrl, '--print', "%(title)s`t%(id)s`t%(ie_key)s`t%(webpage_url)s", '--flat-playlist', '--playlist-items', "1:$MaxResults")
-                    if ($finalCookiePath) { $ytdlArgs += "--cookies", $finalCookiePath }
-                    $SearchResult = yt-dlp @ytdlArgs 
-                    if ($LASTEXITCODE -is [int] -and $LASTEXITCODE -ne 0) { throw "yt-dlp exited with code $LASTEXITCODE" }
-                    $searchRows = @($SearchResult)
+                    $searchParameters = @{
+                        EncodedQuery = $encodedQuery
+                        Playlist     = $Playlist
+                        MaxResults   = $MaxResults
+                        CookiePath   = $finalCookiePath
+                    }
+                    if ($Type) { $searchParameters.Type = $Type }
+                    $searchResults = @(Search-MPVStreamYouTube @searchParameters)
 
-                    if ($null -eq $SearchResult -or $searchRows.Count -eq 0) {
+                    if ($searchResults.Count -eq 0) {
                         Write-Host "No playlists found for that search." -ForegroundColor Red 
                         return
                     }
 
-                    Write-Host "Search results found: $($searchRows.Count)" -ForegroundColor Yellow 
+                    Write-Host "Search results found: $($searchResults.Count)" -ForegroundColor Yellow 
 
                     $choices = [ordered]@{}
 
-                    for ($i = 0; $i -lt $searchRows.Count; $i++) {
-                        $parts = $searchRows[$i] -split "`t", 4
-                        if ($parts.Count -ge 4 -and $parts[0] -and $parts[1]) {
-                            $resultType = Get-MPVStreamSearchType -Id $parts[1] -IeKey $parts[2] -WebpageUrl $parts[3]
-                            $index = $choices.Count
-                            $choices.Add($index, [ordered]@{
-                                    Title      = $parts[0]
-                                    ID         = $parts[1]
-                                    Type       = $resultType
-                                    Url        = $parts[3]
-                                    MenuTitle  = "[$resultType] $($parts[0])"
-                                })
-                        }
+                    foreach ($result in $searchResults) {
+                        $choices.Add($choices.Count, $result)
                     }
 
                     $TitleArray = $choices.Values.MenuTitle 
                     if ($TitleArray) {
-                        $selectedResult = Select-MPVStreamSearchResult -Items @($choices.Values) -Title "Playlist Results: $Url" -Config $configData
+                        if ($First) {
+                            $selectedResult = @($choices.Values)[0]
+                        } else {
+                            $selectedResult = Select-MPVStreamSearchResult -Items @($choices.Values) -Title "Playlist Results: $Url" -Config $configData
+                        }
                         if ($null -eq $selectedResult) { return }
 
                         $targetUrl = $selectedResult.Url
@@ -245,32 +247,27 @@ function Start-MPVStream {
                     } else { return }
                 } else {
                     # Standard mixed search: videos, playlists, and channels.
-                    $searchUrl = "https://www.youtube.com/results?search_query=$encodedQuery"
-                    $ytdlArgs = @($searchUrl, '--print', "%(title)s`t%(id)s`t%(ie_key)s`t%(webpage_url)s", '--flat-playlist', '--playlist-items', "1:$MaxResults")
-                    if ($finalCookiePath) { $ytdlArgs += "--cookies", $finalCookiePath }
-                    $SearchResult = yt-dlp @ytdlArgs 
-                    if ($LASTEXITCODE -is [int] -and $LASTEXITCODE -ne 0) { throw "yt-dlp exited with code $LASTEXITCODE" }
-                    $searchRows = @($SearchResult)
+                    $searchParameters = @{
+                        EncodedQuery = $encodedQuery
+                        Playlist     = $Playlist
+                        MaxResults   = $MaxResults
+                        CookiePath   = $finalCookiePath
+                    }
+                    if ($Type) { $searchParameters.Type = $Type }
+                    $searchResults = @(Search-MPVStreamYouTube @searchParameters)
                     
                     $choices = [ordered]@{}
 
-                    for ($i = 0; $i -lt $searchRows.Count; $i++) {
-                        $parts = $searchRows[$i] -split "`t", 4
-                        if ($parts.Count -ge 4 -and $parts[0] -and $parts[1]) {
-                            $resultType = Get-MPVStreamSearchType -Id $parts[1] -IeKey $parts[2] -WebpageUrl $parts[3]
-                            $index = $choices.Count
-                            $choices.Add($index, [ordered]@{
-                                    Title      = $parts[0]
-                                    ID         = $parts[1]
-                                    Type       = $resultType
-                                    Url        = $parts[3]
-                                    MenuTitle  = "[$resultType] $($parts[0])"
-                                })
-                        }
+                    foreach ($result in $searchResults) {
+                        $choices.Add($choices.Count, $result)
                     }
                     $TitleArray = $choices.Values.MenuTitle
                     if ($TitleArray) {
-                        $selectedResult = Select-MPVStreamSearchResult -Items @($choices.Values) -Title "Search Results: $Url" -Config $configData
+                        if ($First) {
+                            $selectedResult = @($choices.Values)[0]
+                        } else {
+                            $selectedResult = Select-MPVStreamSearchResult -Items @($choices.Values) -Title "Search Results: $Url" -Config $configData
+                        }
                         if ($null -eq $selectedResult) { return }
 
                         $targetUrl = $selectedResult.Url 
@@ -284,55 +281,8 @@ function Start-MPVStream {
         }
 
         # --- 4. Format Mapping ---
-        $formatMap = @{
-            '480p'  = 'bestvideo[height<=480]+bestaudio/best' 
-            '720p'  = 'bestvideo[height<=720]+bestaudio/best' 
-            '1080p' = 'bestvideo[height<=1080]+bestaudio/best' 
-            'best'  = 'bestvideo+bestaudio/best' 
-            'audio' = 'bestaudio/best' 
-        }
-        $actualFormat = $formatMap[$YtdlFormat]
-        
         # --- 5. Argument Construction ---
-        $mpvArgs = @()
-        if (-not $Background) { $mpvArgs += "--terminal=yes" } 
-
-        switch ($Size) {
-            'PIP' {
-                $mpvArgs += "--geometry=320x180-10-10" 
-                $mpvArgs += "--autofit=320x180" 
-                $mpvArgs += "--no-border" 
-                $mpvArgs += "--ontop" 
-            }
-            'Small' { $mpvArgs += "--autofit=854x480" } 
-            'Medium' { $mpvArgs += "--autofit=1280x720" } 
-            'Max' { $mpvArgs += "--fullscreen" } 
-        }
-
-        if ($AudioOnly) { $mpvArgs += "--no-video" } 
-        if ($Loop) { $mpvArgs += "--loop=inf" } 
-        if ($HardwareAccel) { $mpvArgs += "--hwdec=auto" } 
-        
-        if ($ReversePlaylist) { 
-            $mpvArgs += "--ytdl-raw-options=playlist-items=1-" 
-            $mpvArgs += "--ytdl-raw-options=playlist-reverse=" 
-        }
-        
-        # Add ytdl-format option
-        $mpvArgs += "--ytdl-format=$actualFormat"
-        
-        # Add cookie handling if available
-        if ($finalCookiePath) {
-            $mpvArgs += "--ytdl-raw-options=cookies=$finalCookiePath"
-        }
-        
-        # Add no-download-archive option to prevent archive creation
-        $mpvArgs += "--ytdl-raw-options=no-download-archive="
-        
-        # Add session ID to MPV (unless disabled)
-        if (-not $NoSubtitles) {
-            $mpvArgs += "--slang=en"
-        }
+        $mpvArgs = New-MPVStreamMpvArgument -Size $Size -YtdlFormat $YtdlFormat -CookiePath $finalCookiePath -AudioOnly:$AudioOnly -Loop:$Loop -HardwareAccel:$HardwareAccel -Background:$Background -ReversePlaylist:$ReversePlaylist -NoSubtitles:$NoSubtitles
 
         
         
@@ -376,6 +326,8 @@ function Write-MPVStreamHelp {
     Write-Host "`nSearch Features" -ForegroundColor White 
     Write-Host "    $("{0,-22}" -f "-Search, -s") Search YouTube instead of direct URL" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Playlist, -p") Search for playlists only" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-First") Play first search result without picker" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-Type <type>") Filter search results (Video, Playlist, Channel)" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-MaxResults, -max <num>") Number of search results (1-50, default: 10)" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-ReversePlaylist, -r") Reverse playlist order" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-CookiePath, -c <path>") Path to cookie file (saved persistently)" -ForegroundColor $cDesc 
@@ -383,6 +335,8 @@ function Write-MPVStreamHelp {
     Write-Host "`nExamples" -ForegroundColor White 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s" -ForegroundColor $cDesc 
+    Write-Host "    play 'never gonna give you up' -s -First" -ForegroundColor $cDesc 
+    Write-Host "    play 'live coding' -s -Type Video" -ForegroundColor $cDesc 
     Write-Host "    play 'lofi beats' -s -p -f audio" -ForegroundColor $cDesc 
     Write-Host "    play 'https://youtu.be/dQw4w9WgXcQ' -sz Small -f 720p" -ForegroundColor $cDesc 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' -c cookies.txt" -ForegroundColor $cDesc 
@@ -775,6 +729,183 @@ function Get-MPVStreamSearchType {
     }
 
     return 'Video'
+}
+
+function New-MPVStreamYtdlpSearchArgument {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$EncodedQuery,
+
+        [switch]$Playlist,
+
+        [Parameter(Mandatory = $true)]
+        [int]$MaxResults,
+
+        [string]$CookiePath
+    )
+
+    $searchUrl = "https://www.youtube.com/results?search_query=$EncodedQuery"
+    if ($Playlist) {
+        $searchUrl = "$searchUrl&sp=EgIQAw%3D%3D"
+    }
+
+    $arguments = @(
+        $searchUrl,
+        '--print',
+        "%(title)s`t%(id)s`t%(ie_key)s`t%(webpage_url)s`t%(duration_string)s`t%(uploader)s`t%(view_count)s",
+        '--flat-playlist',
+        '--playlist-items',
+        "1:$MaxResults"
+    )
+
+    if ($CookiePath) {
+        $arguments += '--cookies', $CookiePath
+    }
+
+    return $arguments
+}
+
+function Search-MPVStreamYouTube {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$EncodedQuery,
+
+        [switch]$Playlist,
+
+        [Parameter(Mandatory = $true)]
+        [int]$MaxResults,
+
+        [string]$CookiePath,
+
+        [ValidateSet('Video', 'Playlist', 'Channel')]
+        [string]$Type
+    )
+
+    $ytdlArgs = New-MPVStreamYtdlpSearchArgument -EncodedQuery $EncodedQuery -Playlist:$Playlist -MaxResults $MaxResults -CookiePath $CookiePath
+    $searchRows = @(yt-dlp @ytdlArgs)
+    if ($LASTEXITCODE -is [int] -and $LASTEXITCODE -ne 0) { throw "yt-dlp exited with code $LASTEXITCODE" }
+
+    $results = foreach ($row in $searchRows) {
+        $result = ConvertFrom-MPVStreamSearchRow -Row $row
+        if ($null -eq $result) { continue }
+        if ($Type -and $result.Type -ne $Type) { continue }
+        $result
+    }
+
+    return @($results)
+}
+
+function New-MPVStreamMpvArgument {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('PIP', 'Small', 'Medium', 'Max')]
+        [string]$Size,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('480p', '720p', '1080p', 'best', 'audio')]
+        [string]$YtdlFormat,
+
+        [string]$CookiePath,
+
+        [switch]$AudioOnly,
+
+        [switch]$Loop,
+
+        [switch]$HardwareAccel,
+
+        [switch]$Background,
+
+        [switch]$ReversePlaylist,
+
+        [switch]$NoSubtitles
+    )
+
+    $formatMap = @{
+        '480p'  = 'bestvideo[height<=480]+bestaudio/best'
+        '720p'  = 'bestvideo[height<=720]+bestaudio/best'
+        '1080p' = 'bestvideo[height<=1080]+bestaudio/best'
+        'best'  = 'bestvideo+bestaudio/best'
+        'audio' = 'bestaudio/best'
+    }
+
+    $arguments = @()
+    if (-not $Background) { $arguments += '--terminal=yes' }
+
+    switch ($Size) {
+        'PIP' {
+            $arguments += '--geometry=320x180-10-10'
+            $arguments += '--autofit=320x180'
+            $arguments += '--no-border'
+            $arguments += '--ontop'
+        }
+        'Small' { $arguments += '--autofit=854x480' }
+        'Medium' { $arguments += '--autofit=1280x720' }
+        'Max' { $arguments += '--fullscreen' }
+    }
+
+    if ($AudioOnly) { $arguments += '--no-video' }
+    if ($Loop) { $arguments += '--loop=inf' }
+    if ($HardwareAccel) { $arguments += '--hwdec=auto' }
+
+    if ($ReversePlaylist) {
+        $arguments += '--ytdl-raw-options=playlist-items=1-'
+        $arguments += '--ytdl-raw-options=playlist-reverse='
+    }
+
+    $arguments += "--ytdl-format=$($formatMap[$YtdlFormat])"
+
+    if ($CookiePath) {
+        $arguments += "--ytdl-raw-options=cookies=$CookiePath"
+    }
+
+    $arguments += '--ytdl-raw-options=no-download-archive='
+
+    if (-not $NoSubtitles) {
+        $arguments += '--slang=en'
+    }
+
+    return $arguments
+}
+
+function ConvertFrom-MPVStreamSearchRow {
+    param([string]$Row)
+
+    $parts = $Row -split "`t", 7
+    if ($parts.Count -lt 4 -or -not $parts[0] -or -not $parts[1]) {
+        return $null
+    }
+
+    $resultType = Get-MPVStreamSearchType -Id $parts[1] -IeKey $parts[2] -WebpageUrl $parts[3]
+    $duration = if ($parts.Count -ge 5) { $parts[4] } else { $null }
+    $uploader = if ($parts.Count -ge 6) { $parts[5] } else { $null }
+    $viewCount = if ($parts.Count -ge 7) { $parts[6] } else { $null }
+    $metadata = @($duration, $uploader)
+
+    if ($viewCount -and $viewCount -ne 'NA') {
+        $viewNumber = 0L
+        if ([long]::TryParse($viewCount, [ref]$viewNumber)) {
+            $metadata += ('{0:N0} views' -f $viewNumber)
+        } else {
+            $metadata += "$viewCount views"
+        }
+    }
+
+    $metadata = @($metadata | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_ -ne 'NA' })
+    $menuTitle = "[$resultType] $($parts[0])"
+    if ($metadata.Count -gt 0) {
+        $menuTitle = "$menuTitle | $($metadata -join ' | ')"
+    }
+
+    [ordered]@{
+        Title     = $parts[0]
+        ID        = $parts[1]
+        Type      = $resultType
+        Url       = $parts[3]
+        Duration  = $duration
+        Uploader  = $uploader
+        ViewCount = $viewCount
+        MenuTitle = $menuTitle
+    }
 }
 
 Export-ModuleMember -Function Start-MPVStream -Alias play 

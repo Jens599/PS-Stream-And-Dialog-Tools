@@ -28,7 +28,9 @@ A comprehensive media player wrapper that provides streamlined playback experien
 
 #### Features
 - Direct URL playback
-- YouTube video and playlist search
+- YouTube video and playlist search with duration, uploader, and view metadata when available
+- First-result playback for searches without opening the selector
+- Search result filtering by video, playlist, or channel
 - Multiple window sizes (PIP, Small, Medium, Max)
 - Quality selection (480p, 720p, 1080p, best, audio-only)
 - Background playback mode
@@ -46,6 +48,12 @@ play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
 
 # YouTube search
 play 'never gonna give you up' -s
+
+# Play the first YouTube search result immediately
+play 'never gonna give you up' -s -First
+
+# Search videos only
+play 'live coding' -s -Type Video
 
 # Search for playlists with audio-only
 play 'lofi beats' -s -p -f audio
