@@ -73,14 +73,23 @@ function Select-MPVStreamMenuIndex {
 function Select-MPVStreamSearchResultWithFzf {
     param([object[]]$Items, [string]$Title)
 
+    $isOptionMenu = Test-MPVStreamOptionMenu -Items $Items
+
     $lines = for ($i = 0; $i -lt $Items.Count; $i++) {
-        Format-MPVStreamSearchResultLine -Item $Items[$i] -Index ($i + 1)
+        if ($isOptionMenu) {
+            Format-MPVStreamOptionLine -Item $Items[$i] -Index ($i + 1)
+        } else {
+            Format-MPVStreamSearchResultLine -Item $Items[$i] -Index ($i + 1)
+        }
     }
 
-    $header = @(
-        $Title,
-        ('{0,-3} {1,-8} {2,-8} {3,12}  {4,-20}  {5}' -f 'No', 'Type', 'Length', 'Views', 'Uploader', 'Title')
-    ) -join "`n"
+    $header = $Title
+    if (-not $isOptionMenu) {
+        $header = @(
+            $Title,
+            ('{0,-3} {1,-8} {2,-8} {3,12}  {4,-20}  {5}' -f 'No', 'Type', 'Length', 'Views', 'Uploader', 'Title')
+        ) -join "`n"
+    }
 
     $selected = $lines | fzf `
         --height 55% `
@@ -103,7 +112,17 @@ function Select-MPVStreamSearchResultWithFzf {
 function Select-MPVStreamSearchResultWithConsoleGridView {
     param([object[]]$Items, [string]$Title)
 
+    $isOptionMenu = Test-MPVStreamOptionMenu -Items $Items
+
     $gridItems = for ($i = 0; $i -lt $Items.Count; $i++) {
+        if ($isOptionMenu) {
+            [pscustomobject]@{
+                Index = $i
+                Title = $Items[$i].Title
+            }
+            continue
+        }
+
         [pscustomobject]@{
             Index    = $i
             Type     = $Items[$i].Type
@@ -124,9 +143,18 @@ function Select-MPVStreamSearchResultWithBasicPrompt {
     param([object[]]$Items, [string]$Title)
 
     Write-Host "`n$Title" -ForegroundColor Cyan
-    Write-Host ('  {0,-3} {1,-8} {2,-8} {3,12}  {4,-20}  {5}' -f 'No', 'Type', 'Length', 'Views', 'Uploader', 'Title') -ForegroundColor DarkGray
+    $isOptionMenu = Test-MPVStreamOptionMenu -Items $Items
+
+    if (-not $isOptionMenu) {
+        Write-Host ('  {0,-3} {1,-8} {2,-8} {3,12}  {4,-20}  {5}' -f 'No', 'Type', 'Length', 'Views', 'Uploader', 'Title') -ForegroundColor DarkGray
+    }
+
     for ($i = 0; $i -lt $Items.Count; $i++) {
-        Write-Host ('  {0}' -f (Format-MPVStreamSearchResultLine -Item $Items[$i] -Index ($i + 1)))
+        if ($isOptionMenu) {
+            Write-Host ('  {0}' -f (Format-MPVStreamOptionLine -Item $Items[$i] -Index ($i + 1)))
+        } else {
+            Write-Host ('  {0}' -f (Format-MPVStreamSearchResultLine -Item $Items[$i] -Index ($i + 1)))
+        }
     }
 
     $answer = Read-Host 'Select number or press Enter to cancel'
@@ -139,6 +167,29 @@ function Select-MPVStreamSearchResultWithBasicPrompt {
 
     Write-Warning 'Invalid selection.'
     return $null
+}
+
+function Test-MPVStreamOptionMenu {
+    param([object[]]$Items)
+
+    if ($Items.Count -eq 0) { return $false }
+    foreach ($item in $Items) {
+        if ($item.Type -ne 'Option') { return $false }
+    }
+
+    return $true
+}
+
+function Format-MPVStreamOptionLine {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object]$Item,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Index
+    )
+
+    '{0:00}  {1}' -f $Index, (Get-MPVStreamDisplayValue $Item.Title)
 }
 
 function Format-MPVStreamSearchResultLine {

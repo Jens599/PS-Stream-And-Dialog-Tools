@@ -196,6 +196,21 @@ Describe 'Start-MPVStream behavior' {
         }
     }
 
+    It 'formats config menu options without media columns' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            $items = @(
+                [pscustomobject]@{ Index = 0; Title = 'Search UI Provider: fzf'; Type = 'Option'; Url = $null; MenuTitle = 'Search UI Provider: fzf' },
+                [pscustomobject]@{ Index = 1; Title = 'Cookie Path: <not set>'; Type = 'Option'; Url = $null; MenuTitle = 'Cookie Path: <not set>' }
+            )
+
+            Test-MPVStreamOptionMenu -Items $items | Should Be $true
+            Format-MPVStreamOptionLine -Item $items[0] -Index 1 | Should Be '01  Search UI Provider: fzf'
+            Format-MPVStreamOptionLine -Item $items[1] -Index 2 | Should Be '02  Cookie Path: <not set>'
+        }
+    }
+
     It 'builds yt-dlp search arguments with metadata fields and cookies' {
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 
