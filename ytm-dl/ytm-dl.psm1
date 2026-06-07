@@ -1,21 +1,17 @@
 function Show-GitStyleHelp {
     Write-Host @"
-usage: Invoke-YtmDownload [-v | --version] [-h | --help] [--verbose] 
-                          [--output-dir <path>] [--parallel <number>] 
-                          <url> [<args>]
+usage: Invoke-YtmDownload [-Verbose] [-OutputDir <path>] [-Parallel <number>] <url>
 
 These are common Invoke-YtmDownload usage patterns:
 
 BASIC DOWNLOADS:
    <url>                    Download single track or playlist
    <file.txt>               Download URLs from text file
-   --help                   Show this help message
-   --verbose                Show detailed download information
+   -Verbose                 Show detailed download information
 
 DOWNLOAD OPTIONS:
-   --output-dir <path>      Set download directory (default: ~/Downloads/Music)
-   --parallel <number>      Number of simultaneous downloads (1-10, default: 4)
-   --cookies <file>         Use cookies file for premium content
+   -OutputDir <path>        Set download directory (default: ~/Downloads/Music)
+   -Parallel <number>       Number of simultaneous downloads (1-10, default: 4)
 
 PIPELINE OPERATIONS:
    "url1", "url2" |         Download multiple URLs via pipeline
@@ -26,33 +22,26 @@ EXAMPLES:
    Invoke-YtmDownload "https://music.youtube.com/watch?v=..."
 
    # Download playlist to custom directory
-   Invoke-YtmDownload --url "https://music.youtube.com/playlist?list=..." --output-dir "D:\MyMusic"
+   Invoke-YtmDownload -Url "https://music.youtube.com/playlist?list=..." -OutputDir "D:\MyMusic"
 
    # Download from file with 8 parallel connections
-   Invoke-YtmDownload --url "C:\music\urls.txt" --parallel 8
+   Invoke-YtmDownload -Url "C:\music\urls.txt" -Parallel 8
 
    # Pipeline multiple URLs
    "url1", "url2", "url3" | Invoke-YtmDownload
 
    # Read URLs from file and pipe with custom settings
-   Get-Content "playlist.txt" | Invoke-YtmDownload --parallel 6
-
-CONFIGURATION:
-   --cookies                Path to cookies.txt for premium content
-   --no-picard              Skip automatic MusicBrainz Picard launch
-   --format                 Audio format (default: opus)
+   Get-Content "playlist.txt" | Invoke-YtmDownload -Parallel 6
 
 TROUBLESHOOTING:
-   --verbose                Show detailed yt-dlp output
-   --dry-run                Simulate download without actual download
-   --update                 Update yt-dlp to latest version
+   -Verbose                 Show detailed yt-dlp output
 
 PERFORMANCE:
    Automatically uses aria2c for maximum download speed (16 connections)
    Falls back to yt-dlp internal optimizations if aria2c unavailable
    Optimized for YouTube Music with reduced bitrate audio formats
 
-See 'Invoke-YtmDownload --help' for detailed parameter information.
+See 'Get-Help Invoke-YtmDownload -Detailed' for detailed parameter information.
 Visit https://github.com/yt-dlp/yt-dlp for yt-dlp documentation.
 "@
 }
@@ -278,88 +267,53 @@ function Invoke-YtmDownload {
         Write-Verbose "Using yt-dlp internal optimizations (aria2c not available)"
     }
 
-    # Shared progress tracking
         $total = $finalUrls.Count
         $completed = 0
-        $progressLock = [System.Threading.Semaphore]::New(1, 1)
-
-        function Invoke-Download($u) {
-            Write-Verbose "Starting download for: $u"
-            $dlArgs = $baseArgs + $u
-            Write-Verbose "yt-dlp arguments: $($dlArgs -join ' ')"
-            try {
-                & yt-dlp @dlArgs
-                $exit = $LASTEXITCODE
-                Write-Verbose "yt-dlp exit code: $exit"
+        $nextIndex = 0
+        $running = @()
+        $downloadScript = {
+            param($dlArgs, $url)
+            $output = & yt-dlp @dlArgs $url 2>&1
+            return @{
+                ExitCode = $LASTEXITCODE
+                Output = $output -join "`n"
             }
-            catch {
-                $exit = 1
-                Write-Warning "Error executing yt-dlp for $u : $($_.Exception.Message)"
-            }
-
-            $progressLock.WaitOne()
-            try {
-                $script:completed++
-                Write-Progress -Activity "Invoke-YtmDownload: Downloading" -Status "$completed of $total completed" -PercentComplete (($completed / $total) * 100)
-            }
-            finally {
-                $progressLock.Release()
-            }
-
-            if ($exit -ne 0) { Write-Warning "yt-dlp failed for $u (exit code: $exit)" }
         }
 
-        # Simple single-threaded download with progress animation
-        $spinner = @('|', '/', '-', '\')
-        $spinnerIndex = 0
-        
-        foreach ($u in $finalUrls) {
-            $currentTitle = "Downloading $($finalUrls.IndexOf($u) + 1)/$($finalUrls.Count)"
-            
-            # Show spinner while downloading
-            $job = Start-Job -ScriptBlock {
-                param($dlArgs, $url)
-                $output = & yt-dlp @dlArgs $url 2>&1
-                return @{
-                    ExitCode = $LASTEXITCODE
-                    Output = $output -join "`n"
-                }
-            } -ArgumentList $baseArgs, $u
-            
-            # Show spinner animation
-            while ($job.State -eq 'Running') {
-                $spinnerChar = $spinner[$spinnerIndex % $spinner.Length]
-                $currentProgress = if ($total -gt 0) { [Math]::Min(($script:completed / $total) * 100, 100) } else { 0 }
-                Write-Progress -Activity "Invoke-YtmDownload" -Status "$currentTitle $spinnerChar" -PercentComplete $currentProgress
-                Start-Sleep -Milliseconds 200
-                $spinnerIndex++
+        while ($nextIndex -lt $finalUrls.Count -or $running.Count -gt 0) {
+            while ($nextIndex -lt $finalUrls.Count -and $running.Count -lt $Parallel) {
+                $u = $finalUrls[$nextIndex]
+                Write-Verbose "Starting download $($nextIndex + 1)/$total for: $u"
+                $job = Start-Job -ScriptBlock $downloadScript -ArgumentList $baseArgs, $u
+                $running += [pscustomobject]@{ Job = $job; Url = $u; Index = $nextIndex + 1 }
+                $nextIndex++
             }
-            
-            $result = $job | Receive-Job -Wait
-            Remove-Job $job -Force
-            
-            $script:completed++
-            $finalProgress = if ($total -gt 0) { [Math]::Min(($script:completed / $total) * 100, 100) } else { 0 }
-            Write-Progress -Activity "Invoke-YtmDownload" -Status "Completed $($script:completed)/$total" -PercentComplete $finalProgress
-            
-            # Better success detection - check for actual file creation and success indicators
+
+            $finishedJob = Wait-Job -Job ($running.Job) -Any
+            $entry = $running | Where-Object { $_.Job.Id -eq $finishedJob.Id } | Select-Object -First 1
+            $result = $finishedJob | Receive-Job -Wait
+            Remove-Job $finishedJob -Force
+            $running = @($running | Where-Object { $_.Job.Id -ne $finishedJob.Id })
+
+            $completed++
+            $percent = if ($total -gt 0) { [Math]::Min(($completed / $total) * 100, 100) } else { 0 }
+            Write-Progress -Activity "Invoke-YtmDownload" -Status "Completed $completed/$total" -PercentComplete $percent
+
             $actualFailure = $false
             if ($result.ExitCode -ne 0) {
-                # Check if it's actually a failure by looking at output
-                $outputText = $result.Output.ToLower()
+                $outputText = ($result.Output | Out-String).ToLowerInvariant()
                 $successIndicators = @('100%', 'already downloaded', 'has already been downloaded', 'skipped', 'found existing file')
                 $failureIndicators = @('error', 'failed', 'unable', 'cannot', 'permission denied', 'not found', 'network error')
-                
-                $hasSuccess = $successIndicators | Where-Object { $outputText -contains $_ }
-                $hasFailure = $failureIndicators | Where-Object { $outputText -contains $_ }
-                
+                $hasSuccess = $successIndicators | Where-Object { $outputText.Contains($_) }
+                $hasFailure = $failureIndicators | Where-Object { $outputText.Contains($_) }
+
                 if ($hasFailure -or -not $hasSuccess) {
                     $actualFailure = $true
                 }
             }
-            
-            if ($actualFailure) { 
-                Write-Warning "Download failed for track $($finalUrls.IndexOf($u) + 1)"
+
+            if ($actualFailure) {
+                Write-Warning "Download failed for track $($entry.Index): $($entry.Url)"
                 if ($VerbosePreference -eq 'Continue') {
                     Write-Host "Error output: $($result.Output)" -ForegroundColor DarkGray
                 }
@@ -391,5 +345,5 @@ function Invoke-YtmDownload {
 Set-Alias -Name ydl -Value Invoke-YtmDownload
 Set-Alias -Name ytm-dl -Value Invoke-YtmDownload
 
-# Export everything
+# Export public command surface
 Export-ModuleMember -Function Invoke-YtmDownload -Alias ydl, ytm-dl
