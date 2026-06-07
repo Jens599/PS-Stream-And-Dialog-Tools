@@ -36,6 +36,7 @@ A comprehensive media player wrapper that provides streamlined playback experien
 - Custom mpv argument passthrough
 - Dry-run command preview without starting mpv
 - Configurable preferred subtitle language
+- Configurable player executable path, including `mpv`, `mpvnet.com`, or a full `.exe`/`.com` path
 - Background playback mode
 - Hardware acceleration support
 - Playlist control (reverse order)
@@ -75,6 +76,8 @@ play -c 'C:\Users\username\Downloads\cookies.txt'
 
 # Configure defaults and search UI provider
 play --config
+
+# In config, set Player Path to mpvnet.com or a full player executable path if mpv is not in PATH
 
 # Play with authenticated content using saved cookie path
 play 'https://www.youtube.com/playlist?list=PLW8XZTagL0oJhk71Ip3rIzHOFY3Edw2pw'

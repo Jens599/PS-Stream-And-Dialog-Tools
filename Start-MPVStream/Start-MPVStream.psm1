@@ -127,8 +127,9 @@ function Start-MPVStream {
         }
 
         # --- 1. Dependency Checks ---
-        if (-not $isConfigOnly -and -not (Get-Command mpv -ErrorAction SilentlyContinue)) {
-            Write-Error "mpv is missing from PATH. Please install mpv media player." 
+        $player = Resolve-MPVStreamPlayer -PlayerPath $configData.playerPath
+        if (-not $isConfigOnly -and -not $player) {
+            Write-Error "No media player found. Configure one with play -Config, or install mpv/mpv.net in PATH."
             return 
         }
         
@@ -311,7 +312,7 @@ function Start-MPVStream {
         
         
         Write-Host "→ Launching:" -ForegroundColor Green 
-        Write-Host "    mpv $($mpvArgs -join ' ') $targetUrl" -ForegroundColor Yellow 
+        Write-Host "    $($player.DisplayName) $($mpvArgs -join ' ') $targetUrl" -ForegroundColor Yellow 
 
         if ($DryRun) {
             Write-Host "→ Dry run: MPV was not started" -ForegroundColor Cyan
@@ -322,16 +323,16 @@ function Start-MPVStream {
         if ($Background) {
             try {
                 $processArgs = $mpvArgs + $targetUrl
-                Start-Process -FilePath "mpv" -ArgumentList (Join-NativeArgument $processArgs) -ErrorAction Stop
-                Write-Host "→ MPV started in background" -ForegroundColor Green
+                Invoke-MPVStreamPlayer -Player $player -Argument $processArgs -Background
+                Write-Host "→ Player started in background" -ForegroundColor Green
             } catch {
-                Write-Error "Failed to start MPV in background: $($_.Exception.Message)"
+                Write-Error "Failed to start player in background: $($_.Exception.Message)"
             }
         } else {
             try {
-                & mpv $targetUrl @mpvArgs
+                Invoke-MPVStreamPlayer -Player $player -Argument ($mpvArgs + $targetUrl)
             } catch {
-                Write-Error "Failed to start MPV: $($_.Exception.Message)"
+                Write-Error "Failed to start player: $($_.Exception.Message)"
             }
         }
     }

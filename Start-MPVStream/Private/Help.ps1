@@ -25,6 +25,7 @@ function Write-MPVStreamHelp {
     Write-Host "    $("{0,-22}" -f "-ReversePlaylist, -r") Reverse playlist order" -ForegroundColor $cDesc 
     Write-Host "`nConfiguration" -ForegroundColor White 
     Write-Host "    $("{0,-22}" -f "-CookiePath, -c <path>") Path to cookie file (saved persistently)" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "Player Path") Set in -Config; supports mpv, mpvnet.com, or full path" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Config, --config") Interactive persistent configuration" -ForegroundColor $cDesc 
     Write-Host "`nExamples" -ForegroundColor White 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'" -ForegroundColor $cDesc 

@@ -5,9 +5,73 @@ function Join-NativeArgument {
     )
 
     ($Argument | ForEach-Object {
-        if ($_ -notmatch '[\s"]') { return $_ }
+        if ($_ -notmatch '[\s"&|<>^]') { return $_ }
         '"' + ($_ -replace '"', '\"') + '"'
     }) -join ' '
+}
+
+function Resolve-MPVStreamPlayer {
+    param([string]$PlayerPath)
+
+    $candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($PlayerPath)) {
+        $candidates += $PlayerPath
+    }
+
+    $candidates += @('mpv', 'mpvnet.com', 'mpvnet.exe')
+
+    foreach ($candidate in $candidates) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+
+        if ([System.IO.Path]::IsPathRooted($candidate) -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            return [pscustomobject]@{
+                Name        = $candidate
+                DisplayName = $candidate
+                CommandType = 'Application'
+            }
+        }
+
+        $command = Get-Command $candidate -ErrorAction SilentlyContinue
+        if ($command) {
+            return [pscustomobject]@{
+                Name        = $command.Name
+                DisplayName = if ($command.Source) { $command.Source } else { $command.Name }
+                CommandType = $command.CommandType
+            }
+        }
+    }
+
+    return $null
+}
+
+function Invoke-MPVStreamPlayer {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Player,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Argument,
+
+        [switch]$Background
+    )
+
+    if ($Player.CommandType -eq 'Function') {
+        & $Player.Name @Argument
+        return
+    }
+
+    $startProcessParameters = @{
+        FilePath     = $Player.Name
+        ArgumentList = Join-NativeArgument $Argument
+        ErrorAction  = 'Stop'
+    }
+
+    if (-not $Background) {
+        $startProcessParameters.Wait = $true
+        $startProcessParameters.NoNewWindow = $true
+    }
+
+    Start-Process @startProcessParameters
 }
 
 function New-MPVStreamMpvArgument {

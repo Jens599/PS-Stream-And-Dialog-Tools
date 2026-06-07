@@ -107,7 +107,7 @@ Describe 'Start-MPVStream behavior' {
             $script:menuOptions[0] | Should Be '[Channel] Creator'
             $script:menuOptions[1] | Should Be '[Video] Only Result'
             $script:menuOptions[2] | Should Be '[Playlist] Playlist Result'
-            $script:mpvArgs[0] | Should Be 'https://www.youtube.com/watch?v=video123'
+            $script:mpvArgs[-1] | Should Be 'https://www.youtube.com/watch?v=video123'
 
             Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
             Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
@@ -122,7 +122,7 @@ Describe 'Start-MPVStream behavior' {
         $source = Get-Content -LiteralPath (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psm1') -Raw
 
         $source | Should Match '\$isConfigOnly = \[string\]::IsNullOrWhiteSpace\(\$Url\) -and \$CookiePath'
-        $source | Should Match 'if \(-not \$isConfigOnly -and -not \(Get-Command mpv'
+        $source | Should Match '\$player = Resolve-MPVStreamPlayer -PlayerPath \$configData\.playerPath'
         $source | Should Match 'if \(\$Search -and -not \(Get-Command yt-dlp'
     }
 
@@ -138,6 +138,7 @@ Describe 'Start-MPVStream behavior' {
             $config = Get-MPVStreamDefaultConfig
 
             $config.menuProvider | Should Be 'fzf'
+            $config.playerPath | Should Be $null
             $config.size | Should Be 'PIP'
             $config.ytdlFormat | Should Be '480p'
             $config.maxResults | Should Be 10
@@ -237,7 +238,7 @@ Describe 'Start-MPVStream behavior' {
 
             Start-MPVStream 'first result' -Search -First -Size Small -YtdlFormat audio
 
-            $script:mpvArgs[0] | Should Be 'https://www.youtube.com/watch?v=first123'
+            $script:mpvArgs[-1] | Should Be 'https://www.youtube.com/watch?v=first123'
 
             Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
             Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
@@ -304,6 +305,22 @@ Describe 'Start-MPVStream behavior' {
 
             $subtitleArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat audio -SubtitleLanguage @('en', 'ja'))
             ($subtitleArgs -contains '--slang=en,ja') | Should Be $true
+        }
+    }
+
+    It 'resolves configured player paths and fallback commands' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function mpvnet.com { }
+
+            $fallback = Resolve-MPVStreamPlayer
+            $configured = Resolve-MPVStreamPlayer -PlayerPath 'mpvnet.com'
+
+            $fallback.Name | Should Be 'mpvnet.com'
+            $configured.Name | Should Be 'mpvnet.com'
+
+            Remove-Item Function:\mpvnet.com -ErrorAction SilentlyContinue
         }
     }
 

@@ -5,6 +5,7 @@ function Get-MPVStreamConfigPath {
 function Get-MPVStreamDefaultConfig {
     [pscustomobject]@{
         cookiePath       = $null
+        playerPath       = $null
         menuProvider     = 'fzf'
         size             = 'PIP'
         ytdlFormat       = '480p'
@@ -67,6 +68,7 @@ function Invoke-MPVStreamConfig {
         $options = @(
             "Search UI Provider: $(Get-MPVStreamMenuProviderLabel $Config.menuProvider)"
             "Cookie Path: $(if ($Config.cookiePath) { $Config.cookiePath } else { '<not set>' })"
+            "Player Path: $(if ($Config.playerPath) { $Config.playerPath } else { '<auto>' })"
             "Default Window Size: $($Config.size)"
             "Default Quality / Format: $($Config.ytdlFormat)"
             "Max Search Results: $($Config.maxResults)"
@@ -88,19 +90,20 @@ function Invoke-MPVStreamConfig {
         switch ($selection) {
             0 { Set-MPVStreamMenuProvider -Config $Config }
             1 { Set-MPVStreamCookiePath -Config $Config }
-            2 { $Config.size = Select-MPVStreamConfigValue -Title 'Default Window Size' -Options @('PIP', 'Small', 'Medium', 'Max') -CurrentValue $Config.size }
-            3 { $Config.ytdlFormat = Select-MPVStreamConfigValue -Title 'Default Quality / Format' -Options @('480p', '720p', '1080p', 'best', 'audio') -CurrentValue $Config.ytdlFormat }
-            4 { Set-MPVStreamMaxResults -Config $Config }
-            5 { $Config.audioOnly = -not $Config.audioOnly }
-            6 { $Config.background = -not $Config.background }
-            7 { $Config.loop = -not $Config.loop }
-            8 { $Config.hardwareAccel = -not $Config.hardwareAccel }
-            9 { $Config.reversePlaylist = -not $Config.reversePlaylist }
-            10 { $Config.noSubtitles = -not $Config.noSubtitles }
-            11 { Set-MPVStreamSubtitleLanguage -Config $Config }
-            12 { $Config | Format-List; Read-Host 'Press Enter to continue' | Out-Null }
-            13 { $Config = Get-MPVStreamDefaultConfig }
-            14 {
+            2 { Set-MPVStreamPlayerPath -Config $Config }
+            3 { $Config.size = Select-MPVStreamConfigValue -Title 'Default Window Size' -Options @('PIP', 'Small', 'Medium', 'Max') -CurrentValue $Config.size }
+            4 { $Config.ytdlFormat = Select-MPVStreamConfigValue -Title 'Default Quality / Format' -Options @('480p', '720p', '1080p', 'best', 'audio') -CurrentValue $Config.ytdlFormat }
+            5 { Set-MPVStreamMaxResults -Config $Config }
+            6 { $Config.audioOnly = -not $Config.audioOnly }
+            7 { $Config.background = -not $Config.background }
+            8 { $Config.loop = -not $Config.loop }
+            9 { $Config.hardwareAccel = -not $Config.hardwareAccel }
+            10 { $Config.reversePlaylist = -not $Config.reversePlaylist }
+            11 { $Config.noSubtitles = -not $Config.noSubtitles }
+            12 { Set-MPVStreamSubtitleLanguage -Config $Config }
+            13 { $Config | Format-List; Read-Host 'Press Enter to continue' | Out-Null }
+            14 { $Config = Get-MPVStreamDefaultConfig }
+            15 {
                 Save-MPVStreamConfig -Config $Config
                 Write-Host "Saved config: $(Get-MPVStreamConfigPath)" -ForegroundColor Green
                 return
@@ -142,6 +145,34 @@ function Set-MPVStreamCookiePath {
     }
 
     $Config.cookiePath = $path
+}
+
+function Set-MPVStreamPlayerPath {
+    param([pscustomobject]$Config)
+
+    $path = Read-Host 'Player path or command (blank for auto: mpv, mpvnet.com, mpvnet.exe)'
+    if ([string]::IsNullOrWhiteSpace($path)) {
+        $Config.playerPath = $null
+        return
+    }
+
+    if (-not [System.IO.Path]::IsPathRooted($path)) {
+        $command = Get-Command $path -ErrorAction SilentlyContinue
+        if ($command) {
+            $Config.playerPath = $path
+            return
+        }
+
+        try { $path = (Resolve-Path $path -ErrorAction Stop | Select-Object -ExpandProperty Path) } catch { }
+    }
+
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        Write-Warning "Player not found: $path"
+        Read-Host 'Press Enter to continue' | Out-Null
+        return
+    }
+
+    $Config.playerPath = $path
 }
 
 function Set-MPVStreamMaxResults {
