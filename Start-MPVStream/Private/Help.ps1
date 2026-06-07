@@ -19,18 +19,23 @@ function Write-MPVStreamHelp {
     Write-Host "`nSearch Features" -ForegroundColor White 
     Write-Host "    $("{0,-22}" -f "-Search, -s") Search YouTube instead of direct URL" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Playlist, -p") Search for playlists only" -ForegroundColor $cDesc 
-    Write-Host "    $("{0,-22}" -f "-First") Play first search result without picker" -ForegroundColor $cDesc 
-    Write-Host "    $("{0,-22}" -f "-Type <type>") Filter mixed results (Video, Playlist, Channel)" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-First, -fi") Play first search result without picker" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-Type, -t <type>") Filter mixed results (Video, Playlist, Channel)" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-MaxResults, -max <num>") Number of search results (1-50, default: 10)" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-Clipboard, -cb") Play URL from clipboard" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-History, -hi") Pick from playback history" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-Last, -la") Replay last history item" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-ReversePlaylist, -r") Reverse playlist order" -ForegroundColor $cDesc 
     Write-Host "`nConfiguration" -ForegroundColor White 
     Write-Host "    $("{0,-22}" -f "-CookiePath, -c <path>") Path to cookie file (saved persistently)" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "Player Path") Set in -Config; supports mpv, mpvnet.com, or full path" -ForegroundColor $cDesc 
-    Write-Host "    $("{0,-22}" -f "-Config, --config") Interactive persistent configuration" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-Config, -cfg") Interactive persistent configuration" -ForegroundColor $cDesc 
     Write-Host "`nExamples" -ForegroundColor White 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s -First" -ForegroundColor $cDesc 
+    Write-Host "    play -Clipboard" -ForegroundColor $cDesc 
+    Write-Host "    play -Last" -ForegroundColor $cDesc 
     Write-Host "    play 'live coding' -s -Type Video" -ForegroundColor $cDesc 
     Write-Host "    play 'lofi beats' -s -p -f audio" -ForegroundColor $cDesc 
     Write-Host "    play 'https://youtu.be/dQw4w9WgXcQ' -SubtitleLanguage en,ja" -ForegroundColor $cDesc 

@@ -31,6 +31,8 @@ A comprehensive media player wrapper that provides streamlined playback experien
 - YouTube video and playlist search with duration, uploader, and view metadata when available
 - First-result playback for searches without opening the selector
 - Search result filtering by video, playlist, or channel
+- Clipboard playback with `-Clipboard`
+- Playback history with `-History` and `-Last`
 - Multiple window sizes (PIP, Small, Medium, Max)
 - Quality selection (480p, 720p, 1080p, best, audio-only)
 - Custom mpv argument passthrough
@@ -55,6 +57,11 @@ play 'never gonna give you up' -s
 
 # Play the first YouTube search result immediately
 play 'never gonna give you up' -s -First
+
+# Play a copied URL or replay recent streams
+play -Clipboard
+play -Last
+play -History
 
 # Search videos only
 play 'live coding' -s -Type Video

@@ -13,6 +13,8 @@ $privateFiles = @(
     'Private\Config.ps1'
     'Private\Picker.ps1'
     'Private\Search.ps1'
+    'Private\Cookies.ps1'
+    'Private\History.ps1'
     'Private\MpvArgs.ps1'
 )
 
@@ -43,6 +45,7 @@ function Start-MPVStream {
         [string]$CookiePath,
 
         [Parameter()]
+        [Alias('cfg')]
         [switch]$Config,
 
         [Alias('s')]
@@ -52,18 +55,33 @@ function Start-MPVStream {
         [switch]$Playlist,
 
         [Parameter()]
+        [Alias('fi')]
         [switch]$First,
 
         [Parameter()]
         [ValidateSet('Video', 'Playlist', 'Channel')]
+        [Alias('t')]
         [string]$Type,
 
         [Parameter()]
-        [Alias('mpvarg')]
+        [Alias('ma', 'mpvarg')]
         [string[]]$MpvArgument,
 
         [Parameter()]
+        [Alias('dr')]
         [switch]$DryRun,
+
+        [Parameter()]
+        [Alias('cb')]
+        [switch]$Clipboard,
+
+        [Parameter()]
+        [Alias('hi')]
+        [switch]$History,
+
+        [Parameter()]
+        [Alias('la')]
+        [switch]$Last,
 
         [Alias('a')]
         [switch]$AudioOnly,
@@ -81,11 +99,11 @@ function Start-MPVStream {
         [switch]$ReversePlaylist,
 
         [Parameter()]
-        [Alias('nosub')]
+        [Alias('ns', 'nosub')]
         [switch]$NoSubtitles,
 
         [Parameter()]
-        [Alias('slang')]
+        [Alias('sl', 'slang')]
         [string[]]$SubtitleLanguage,
 
         [Parameter()]
@@ -112,6 +130,36 @@ function Start-MPVStream {
         if (-not $PSBoundParameters.ContainsKey('ReversePlaylist') -and $configData.reversePlaylist) { $ReversePlaylist = $true }
         if (-not $PSBoundParameters.ContainsKey('NoSubtitles') -and $configData.noSubtitles) { $NoSubtitles = $true }
         if (-not $PSBoundParameters.ContainsKey('SubtitleLanguage') -and $configData.subtitleLanguage) { $SubtitleLanguage = @($configData.subtitleLanguage) }
+
+        if ($Clipboard) {
+            $Url = Get-MPVStreamClipboardText
+            if ([string]::IsNullOrWhiteSpace($Url)) { return }
+        }
+
+        if ($Last) {
+            $lastItem = Get-MPVStreamLastHistoryItem
+            if ($null -eq $lastItem) {
+                Write-Warning 'Playback history is empty.'
+                return
+            }
+
+            $Url = $lastItem.Url
+            $replayTitle = $lastItem.Title
+            $replayType = $lastItem.Type
+            $Search = $false
+            Write-Host "→ Last: $($lastItem.Title)" -ForegroundColor Cyan
+        }
+
+        if ($History) {
+            $historyItem = Select-MPVStreamHistoryItem -Config $configData
+            if ($null -eq $historyItem) { return }
+
+            $Url = $historyItem.Url
+            $replayTitle = $historyItem.Title
+            $replayType = $historyItem.Type
+            $Search = $false
+            Write-Host "→ History: $($historyItem.Title)" -ForegroundColor Cyan
+        }
 
         # --- 0. Help Check / Config Mode ---
         $isConfigOnly = [string]::IsNullOrWhiteSpace($Url) -and $CookiePath
@@ -140,73 +188,7 @@ function Start-MPVStream {
         }
         
         # --- Cookie Configuration ---
-        $configFile = Get-MPVStreamConfigPath
-        $legacyConfigFile = Join-Path $env:USERPROFILE '.mpvstream-config.json'
-        $finalCookiePath = $null
-        
-        if ($configData.cookiePath -and (Test-Path $configData.cookiePath -PathType Leaf)) {
-            $finalCookiePath = $configData.cookiePath
-        } elseif (-not (Test-Path $configFile -PathType Leaf) -and (Test-Path $legacyConfigFile -PathType Leaf)) {
-            try {
-                $legacyConfig = Get-Content -LiteralPath $legacyConfigFile -Raw | ConvertFrom-Json
-                if ($legacyConfig.cookiePath -and (Test-Path $legacyConfig.cookiePath -PathType Leaf)) {
-                    $finalCookiePath = $legacyConfig.cookiePath
-                }
-            } catch {
-                Write-Warning "Failed to read config file: $legacyConfigFile"
-            }
-        }
-        
-        if ($CookiePath) {
-            # Use provided cookie path and save it
-            $finalCookiePath = $CookiePath
-            Write-Host "→ Cookie path provided: $CookiePath" -ForegroundColor Yellow
-            
-            # Save to config file
-            try {
-                $configData.cookiePath = $finalCookiePath
-                Save-MPVStreamConfig -Config $configData
-                Write-Host "→ Cookie path saved to: $configFile" -ForegroundColor Green
-            } catch {
-                Write-Warning "Failed to save config file: $configFile"
-            }
-        } elseif (-not $finalCookiePath) {
-            # Default cookie file locations to check
-            $defaultCookiePaths = @(
-                "cookies.txt",
-                "$env:USERPROFILE\cookies.txt",
-                "$env:USERPROFILE\Downloads\cookies.txt",
-                "$PSScriptRoot\cookies.txt"
-            )
-            
-            foreach ($path in $defaultCookiePaths) {
-                if (Test-Path $path -PathType Leaf) {
-                    $finalCookiePath = $path
-                    break
-                }
-            }
-        }
-        
-        # Convert relative path to absolute path
-        if ($finalCookiePath -and -not [System.IO.Path]::IsPathRooted($finalCookiePath)) {
-            try {
-                $resolvedPath = Resolve-Path $finalCookiePath -ErrorAction Stop | Select-Object -ExpandProperty Path
-                if ($resolvedPath) {
-                    $finalCookiePath = $resolvedPath
-                }
-            } catch {
-                Write-Warning "Failed to resolve path: $finalCookiePath"
-                $finalCookiePath = $null
-            }
-        }
-        
-        # Validate cookie file exists
-        if ($finalCookiePath -and (Test-Path $finalCookiePath -PathType Leaf)) {
-            Write-Host "→ Using cookies: $finalCookiePath" -ForegroundColor Green
-        } elseif ($finalCookiePath) {
-            Write-Warning "Cookie file not found: $finalCookiePath"
-            $finalCookiePath = $null
-        }
+        $finalCookiePath = Resolve-MPVStreamCookiePath -ConfigData $configData -CookiePath $CookiePath -ScriptRoot $PSScriptRoot
 
         # Exit if in config-only mode
         if (-not $Url) {
@@ -226,8 +208,12 @@ function Start-MPVStream {
                 return
             }
             $targetUrl = $Url
+            $historyTitle = if ($replayTitle) { $replayTitle } else { $Url }
+            $historyType = if ($replayType) { $replayType } else { 'Direct' }
         } else {
             $targetUrl = $Url
+            $historyTitle = $Url
+            $historyType = 'Search'
         }
         # --- 3. Search Logic ---
         if ($Search) {
@@ -268,6 +254,8 @@ function Start-MPVStream {
                         if ($null -eq $selectedResult) { return }
 
                         $targetUrl = $selectedResult.Url
+                        $historyTitle = $selectedResult.Title
+                        $historyType = $selectedResult.Type
                         Write-Host "Match [$($selectedResult.Type)]: $($selectedResult.Title)" -ForegroundColor Cyan 
                     } else { return }
                 } else {
@@ -296,6 +284,8 @@ function Start-MPVStream {
                         if ($null -eq $selectedResult) { return }
 
                         $targetUrl = $selectedResult.Url 
+                        $historyTitle = $selectedResult.Title
+                        $historyType = $selectedResult.Type
                         Write-Host "Match [$($selectedResult.Type)]: $($selectedResult.Title)" -ForegroundColor Cyan 
                     } else { return }
                 }
@@ -318,6 +308,8 @@ function Start-MPVStream {
             Write-Host "→ Dry run: MPV was not started" -ForegroundColor Cyan
             return
         }
+
+        Add-MPVStreamHistoryItem -Url $targetUrl -Title $historyTitle -Type $historyType
 
         # --- 6. Execution ---
         if ($Background) {

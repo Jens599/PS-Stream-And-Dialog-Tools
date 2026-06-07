@@ -100,6 +100,8 @@ Describe 'Start-MPVStream behavior' {
                 $script:mpvArgs = $args
             }
 
+            function Add-MPVStreamHistoryItem { }
+
             Start-MPVStream 'only result' -Search -Size Small -YtdlFormat audio
 
             $script:ytdlpArgs[0] | Should Be 'https://www.youtube.com/results?search_query=only%20result'
@@ -112,6 +114,7 @@ Describe 'Start-MPVStream behavior' {
             Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
             Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
             Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
             Remove-Variable ytdlpArgs -Scope Script -ErrorAction SilentlyContinue
             Remove-Variable menuOptions -Scope Script -ErrorAction SilentlyContinue
             Remove-Variable mpvArgs -Scope Script -ErrorAction SilentlyContinue
@@ -133,6 +136,9 @@ Describe 'Start-MPVStream behavior' {
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'MpvArgument' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'DryRun' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'SubtitleLanguage' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Clipboard' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'History' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Last' | Should Be $true
 
         InModuleScope Start-MPVStream {
             $config = Get-MPVStreamDefaultConfig
@@ -149,6 +155,43 @@ Describe 'Start-MPVStream behavior' {
             Normalize-MPVStreamMenuProvider 'Show-Menu' | Should Be 'BasicPrompt'
             Normalize-MPVStreamMenuProvider 'Basic Prompt' | Should Be 'BasicPrompt'
             Normalize-MPVStreamMenuProvider 'not-real' | Should Be 'fzf'
+
+            $command = Get-Command Start-MPVStream -ErrorAction Stop
+            ($command.Parameters['Config'].Aliases -contains 'cfg') | Should Be $true
+            ($command.Parameters['First'].Aliases -contains 'fi') | Should Be $true
+            ($command.Parameters['Type'].Aliases -contains 't') | Should Be $true
+            ($command.Parameters['MpvArgument'].Aliases -contains 'ma') | Should Be $true
+            ($command.Parameters['DryRun'].Aliases -contains 'dr') | Should Be $true
+            ($command.Parameters['Clipboard'].Aliases -contains 'cb') | Should Be $true
+            ($command.Parameters['History'].Aliases -contains 'hi') | Should Be $true
+            ($command.Parameters['Last'].Aliases -contains 'la') | Should Be $true
+            ($command.Parameters['NoSubtitles'].Aliases -contains 'ns') | Should Be $true
+            ($command.Parameters['SubtitleLanguage'].Aliases -contains 'sl') | Should Be $true
+        }
+    }
+
+    It 'resolves cookie paths through the cookie helper' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            $config = Get-MPVStreamDefaultConfig
+            $cookie = Join-Path $env:TEMP 'start-mpvstream-test-cookies.txt'
+            Set-Content -LiteralPath $cookie -Value '# cookies' -Encoding UTF8
+
+            function Save-MPVStreamConfig {
+                param([pscustomobject]$Config)
+                $script:savedCookiePath = $Config.cookiePath
+            }
+
+            $resolved = Resolve-MPVStreamCookiePath -ConfigData $config -CookiePath $cookie -ScriptRoot $PSScriptRoot
+
+            $resolved | Should Be $cookie
+            $config.cookiePath | Should Be $cookie
+            $script:savedCookiePath | Should Be $cookie
+
+            Remove-Item Function:\Save-MPVStreamConfig -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $cookie -ErrorAction SilentlyContinue
+            Remove-Variable savedCookiePath -Scope Script -ErrorAction SilentlyContinue
         }
     }
 
@@ -251,6 +294,8 @@ Describe 'Start-MPVStream behavior' {
                 $script:mpvArgs = $args
             }
 
+            function Add-MPVStreamHistoryItem { }
+
             Start-MPVStream 'first result' -Search -First -Size Small -YtdlFormat audio
 
             $script:mpvArgs[-1] | Should Be 'https://www.youtube.com/watch?v=first123'
@@ -258,6 +303,7 @@ Describe 'Start-MPVStream behavior' {
             Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
             Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
             Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
             Remove-Variable mpvArgs -Scope Script -ErrorAction SilentlyContinue
         }
     }
@@ -339,6 +385,51 @@ Describe 'Start-MPVStream behavior' {
         }
     }
 
+    It 'plays a clipboard URL without requiring a positional URL' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig { Get-MPVStreamDefaultConfig }
+            function Get-MPVStreamClipboardText { 'https://example.test/clipboard' }
+            function mpv { $script:mpvArgs = $args }
+            function Add-MPVStreamHistoryItem { }
+
+            Start-MPVStream -Clipboard
+
+            $script:mpvArgs[-1] | Should Be 'https://example.test/clipboard'
+
+            Remove-Item Function:\Get-MPVStreamClipboardText -ErrorAction SilentlyContinue
+            Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
+            Remove-Variable mpvArgs -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'stores and replays playback history' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            $script:historyPath = Join-Path $env:TEMP 'start-mpvstream-history-test.json'
+            function Get-MPVStreamHistoryPath { $script:historyPath }
+            function Read-MPVStreamConfig { Get-MPVStreamDefaultConfig }
+            function mpv { $script:mpvArgs = $args }
+
+            Add-MPVStreamHistoryItem -Url 'https://example.test/one' -Title 'One' -Type 'Direct'
+            Add-MPVStreamHistoryItem -Url 'https://example.test/two' -Title 'Two' -Type 'Direct'
+
+            (Get-MPVStreamLastHistoryItem).Url | Should Be 'https://example.test/two'
+
+            Start-MPVStream -Last
+            $script:mpvArgs[-1] | Should Be 'https://example.test/two'
+
+            Remove-Item Function:\Get-MPVStreamHistoryPath -ErrorAction SilentlyContinue
+            Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $script:historyPath -ErrorAction SilentlyContinue
+            Remove-Variable mpvArgs -Scope Script -ErrorAction SilentlyContinue
+            Remove-Variable historyPath -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
     It 'does not start mpv during dry run' {
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 
@@ -351,9 +442,12 @@ Describe 'Start-MPVStream behavior' {
                 throw 'mpv should not be started during dry run.'
             }
 
+            function Add-MPVStreamHistoryItem { throw 'History should not be written during dry run.' }
+
             Start-MPVStream 'https://example.test/video' -DryRun -MpvArgument '--speed=1.25'
 
             Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
         }
     }
 
