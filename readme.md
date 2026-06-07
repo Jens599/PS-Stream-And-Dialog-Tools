@@ -35,6 +35,7 @@ A comprehensive media player wrapper that provides streamlined playback experien
 - Quality selection (480p, 720p, 1080p, best, audio-only)
 - Custom mpv argument passthrough
 - Dry-run command preview without starting mpv
+- Configurable preferred subtitle language
 - Background playback mode
 - Hardware acceleration support
 - Playlist control (reverse order)
@@ -65,6 +66,9 @@ play 'https://youtu.be/dQw4w9WgXcQ' -sz Small -f 720p
 
 # Preview a custom mpv launch command
 play 'https://youtu.be/dQw4w9WgXcQ' -MpvArgument '--speed=1.25' -DryRun
+
+# Prefer specific subtitle languages
+play 'https://youtu.be/dQw4w9WgXcQ' -SubtitleLanguage en,ja
 
 # Configure cookie path (saved persistently)
 play -c 'C:\Users\username\Downloads\cookies.txt'

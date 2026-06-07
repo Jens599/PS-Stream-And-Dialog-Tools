@@ -73,6 +73,10 @@ function Start-MPVStream {
         [switch]$NoSubtitles,
 
         [Parameter()]
+        [Alias('slang')]
+        [string[]]$SubtitleLanguage,
+
+        [Parameter()]
         [ValidateRange(1, 50)]
         [Alias('max')]
         [int]$MaxResults = 10
@@ -95,6 +99,7 @@ function Start-MPVStream {
         if (-not $PSBoundParameters.ContainsKey('HardwareAccel') -and $configData.hardwareAccel) { $HardwareAccel = $true }
         if (-not $PSBoundParameters.ContainsKey('ReversePlaylist') -and $configData.reversePlaylist) { $ReversePlaylist = $true }
         if (-not $PSBoundParameters.ContainsKey('NoSubtitles') -and $configData.noSubtitles) { $NoSubtitles = $true }
+        if (-not $PSBoundParameters.ContainsKey('SubtitleLanguage') -and $configData.subtitleLanguage) { $SubtitleLanguage = @($configData.subtitleLanguage) }
 
         # --- 0. Help Check / Config Mode ---
         $isConfigOnly = [string]::IsNullOrWhiteSpace($Url) -and $CookiePath
@@ -289,7 +294,7 @@ function Start-MPVStream {
 
         # --- 4. Format Mapping ---
         # --- 5. Argument Construction ---
-        $mpvArgs = New-MPVStreamMpvArgument -Size $Size -YtdlFormat $YtdlFormat -CookiePath $finalCookiePath -AudioOnly:$AudioOnly -Loop:$Loop -HardwareAccel:$HardwareAccel -Background:$Background -ReversePlaylist:$ReversePlaylist -NoSubtitles:$NoSubtitles -CustomArgument $MpvArgument
+        $mpvArgs = New-MPVStreamMpvArgument -Size $Size -YtdlFormat $YtdlFormat -CookiePath $finalCookiePath -AudioOnly:$AudioOnly -Loop:$Loop -HardwareAccel:$HardwareAccel -Background:$Background -ReversePlaylist:$ReversePlaylist -NoSubtitles:$NoSubtitles -SubtitleLanguage $SubtitleLanguage -CustomArgument $MpvArgument
 
         
         
@@ -336,6 +341,7 @@ function Write-MPVStreamHelp {
     Write-Host "    $("{0,-22}" -f "-HardwareAccel, -h") Enable hardware acceleration" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-MpvArgument <arg>") Extra mpv argument(s) appended to launch" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-DryRun") Show final command without starting mpv" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-SubtitleLanguage") Preferred subtitle language(s), e.g. en,ja" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-NoSubtitles, -nosub") Disable subtitle language preference" -ForegroundColor $cDesc 
     Write-Host "`nSearch Features" -ForegroundColor White 
     Write-Host "    $("{0,-22}" -f "-Search, -s") Search YouTube instead of direct URL" -ForegroundColor $cDesc 
@@ -352,6 +358,7 @@ function Write-MPVStreamHelp {
     Write-Host "    play 'never gonna give you up' -s -First" -ForegroundColor $cDesc 
     Write-Host "    play 'live coding' -s -Type Video" -ForegroundColor $cDesc 
     Write-Host "    play 'lofi beats' -s -p -f audio" -ForegroundColor $cDesc 
+    Write-Host "    play 'https://youtu.be/dQw4w9WgXcQ' -SubtitleLanguage en,ja" -ForegroundColor $cDesc 
     Write-Host "    play 'https://youtu.be/dQw4w9WgXcQ' -MpvArgument '--speed=1.25' -DryRun" -ForegroundColor $cDesc 
     Write-Host "    play 'https://youtu.be/dQw4w9WgXcQ' -sz Small -f 720p" -ForegroundColor $cDesc 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' -c cookies.txt" -ForegroundColor $cDesc 
@@ -376,6 +383,7 @@ function Get-MPVStreamDefaultConfig {
         hardwareAccel   = $false
         reversePlaylist = $false
         noSubtitles     = $false
+        subtitleLanguage = 'en'
     }
 }
 
@@ -436,6 +444,7 @@ function Invoke-MPVStreamConfig {
             "Hardware Acceleration: $($Config.hardwareAccel)"
             "Reverse Playlist: $($Config.reversePlaylist)"
             "Subtitles Disabled: $($Config.noSubtitles)"
+            "Subtitle Language: $($Config.subtitleLanguage)"
             'Show Current Config'
             'Reset Config'
             'Save and Exit'
@@ -456,9 +465,10 @@ function Invoke-MPVStreamConfig {
             8 { $Config.hardwareAccel = -not $Config.hardwareAccel }
             9 { $Config.reversePlaylist = -not $Config.reversePlaylist }
             10 { $Config.noSubtitles = -not $Config.noSubtitles }
-            11 { $Config | Format-List; Read-Host 'Press Enter to continue' | Out-Null }
-            12 { $Config = Get-MPVStreamDefaultConfig }
-            13 {
+            11 { Set-MPVStreamSubtitleLanguage -Config $Config }
+            12 { $Config | Format-List; Read-Host 'Press Enter to continue' | Out-Null }
+            13 { $Config = Get-MPVStreamDefaultConfig }
+            14 {
                 Save-MPVStreamConfig -Config $Config
                 Write-Host "Saved config: $(Get-MPVStreamConfigPath)" -ForegroundColor Green
                 return
@@ -513,6 +523,24 @@ function Set-MPVStreamMaxResults {
         Write-Warning 'Please enter a number from 1 to 50.'
         Read-Host 'Press Enter to continue' | Out-Null
     }
+}
+
+function Set-MPVStreamSubtitleLanguage {
+    param([pscustomobject]$Config)
+
+    $value = Read-Host "Subtitle language(s), comma-separated (current: $($Config.subtitleLanguage))"
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        $Config.subtitleLanguage = 'en'
+        return
+    }
+
+    $languages = @($value -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($languages.Count -eq 0) {
+        $Config.subtitleLanguage = 'en'
+        return
+    }
+
+    $Config.subtitleLanguage = $languages -join ','
 }
 
 function Set-MPVStreamMenuProvider {
@@ -834,6 +862,8 @@ function New-MPVStreamMpvArgument {
 
         [switch]$NoSubtitles,
 
+        [string[]]$SubtitleLanguage,
+
         [string[]]$CustomArgument
     )
 
@@ -878,7 +908,8 @@ function New-MPVStreamMpvArgument {
     $arguments += '--ytdl-raw-options=no-download-archive='
 
     if (-not $NoSubtitles) {
-        $arguments += '--slang=en'
+        $subtitleValue = if ($SubtitleLanguage) { ($SubtitleLanguage -join ',') } else { 'en' }
+        $arguments += "--slang=$subtitleValue"
     }
 
     if ($CustomArgument) {

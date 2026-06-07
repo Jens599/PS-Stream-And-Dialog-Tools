@@ -132,6 +132,7 @@ Describe 'Start-MPVStream behavior' {
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Config' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'MpvArgument' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'DryRun' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'SubtitleLanguage' | Should Be $true
 
         InModuleScope Start-MPVStream {
             $config = Get-MPVStreamDefaultConfig
@@ -140,6 +141,7 @@ Describe 'Start-MPVStream behavior' {
             $config.size | Should Be 'PIP'
             $config.ytdlFormat | Should Be '480p'
             $config.maxResults | Should Be 10
+            $config.subtitleLanguage | Should Be 'en'
             Normalize-MPVStreamMenuProvider 'fzf' | Should Be 'fzf'
             Normalize-MPVStreamMenuProvider 'Microsoft.PowerShell.ConsoleGuiTools' | Should Be 'ConsoleGuiTools'
             Normalize-MPVStreamMenuProvider 'Out-ConsoleGridView' | Should Be 'OutConsoleGridView'
@@ -281,6 +283,9 @@ Describe 'Start-MPVStream behavior' {
             ($backgroundArgs -contains '--slang=en') | Should Be $false
             ($backgroundArgs -contains '--autofit=854x480') | Should Be $true
             ($backgroundArgs -contains '--ytdl-format=bestaudio/best') | Should Be $true
+
+            $subtitleArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat audio -SubtitleLanguage @('en', 'ja'))
+            ($subtitleArgs -contains '--slang=en,ja') | Should Be $true
         }
     }
 
