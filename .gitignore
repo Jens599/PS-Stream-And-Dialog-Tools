@@ -10,6 +10,8 @@
 
 !Start-MPVStream/
 !Start-MPVStream/*
+!Start-MPVStream/Private/
+!Start-MPVStream/Private/*.ps1
 
 !ytm-dl/
 !ytm-dl/*
