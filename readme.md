@@ -13,33 +13,6 @@ Add-Path -Path 'C:\Tools\MyTool'
 Add-Path -Path 'C:\Tools\MyTool' -Scope Machine
 ```
 
-### Show-Menu
-**Version:** 0.1.0  
-**Description:** Interactive menu system for PowerShell with keyboard navigation
-
-An interactive console menu that allows users to navigate options using arrow keys and select with Enter. Perfect for creating user-friendly scripts with multiple choices.
-
-#### Features
-- Arrow key navigation (Up/Down)
-- Enter to select, Escape to cancel
-- Customizable menu titles
-- Return selected option or index
-- Clean console interface with cursor hiding
-
-#### Usage Examples
-```powershell
-# Basic usage
-$choices = 'Restart Service', 'Stop Service', 'Check Status', 'Exit'
-$result = Show-Menu -Options $choices
-
-# With custom title
-$result = Show-Menu -Options 'Option 1', 'Option 2', 'Option 3' -Title 'Server Management'
-
-# Return index instead of value
-$index = Show-Menu -Options 'Option 1', 'Option 2', 'Option 3' -ReturnIndex
-$selectedOption = $choices[$index]
-```
-
 ### Start-MPVStream
 **Version:** 0.1.0  
 **Alias:** `play`  
@@ -50,7 +23,8 @@ A comprehensive media player wrapper that provides streamlined playback experien
 #### Dependencies
 - `mpv` - Required for media playback
 - `yt-dlp` - Required for YouTube search functionality
-- `Show-Menu` - Optional, for interactive search results selection
+- `fzf` - Recommended for search result selection
+- `Microsoft.PowerShell.ConsoleGuiTools` - Optional alternative selector using `Out-ConsoleGridView`
 
 #### Features
 - Direct URL playback
@@ -63,6 +37,7 @@ A comprehensive media player wrapper that provides streamlined playback experien
 - Loop playback
 - Cookie-based authentication for YouTube
 - Persistent cookie path configuration
+- Persistent search UI provider configuration
 
 #### Usage Examples
 ```powershell
@@ -80,6 +55,9 @@ play 'https://youtu.be/dQw4w9WgXcQ' -sz Small -f 720p
 
 # Configure cookie path (saved persistently)
 play -c 'C:\Users\username\Downloads\cookies.txt'
+
+# Configure defaults and search UI provider
+play --config
 
 # Play with authenticated content using saved cookie path
 play 'https://www.youtube.com/playlist?list=PLW8XZTagL0oJhk71Ip3rIzHOFY3Edw2pw'
@@ -107,7 +85,6 @@ Invoke-YtmDownload -Url 'C:\music\urls.txt' -OutputDir 'D:\MyMusic' -Parallel 4
 1. Clone this repository, then copy or symlink each module directory into a path listed in `$env:PSModulePath`, such as `$env:USERPROFILE\Documents\PowerShell\Modules`:
    ```powershell
    git clone <repository-url> .\PS-Stream-And-Dialog-Tools
-   Copy-Item .\PS-Stream-And-Dialog-Tools\Show-Menu $env:USERPROFILE\Documents\PowerShell\Modules -Recurse
    Copy-Item .\PS-Stream-And-Dialog-Tools\Start-MPVStream $env:USERPROFILE\Documents\PowerShell\Modules -Recurse
    Copy-Item .\PS-Stream-And-Dialog-Tools\Add-Path $env:USERPROFILE\Documents\PowerShell\Modules -Recurse
    Copy-Item .\PS-Stream-And-Dialog-Tools\ytm-dl $env:USERPROFILE\Documents\PowerShell\Modules -Recurse
@@ -126,13 +103,19 @@ Invoke-YtmDownload -Url 'C:\music\urls.txt' -OutputDir 'D:\MyMusic' -Parallel 4
 - Windows operating system
 - For Start-MPVStream: mpv media player installed and in PATH
 - For Start-MPVStream search and ytm-dl downloads: yt-dlp installed and in PATH
+- For Start-MPVStream interactive search: fzf is recommended; Out-ConsoleGridView is optional
 
 ## Module Dependencies
 
 ### Start-MPVStream Dependencies
 - **mpv**: Media player for video/audio playback
 - **yt-dlp**: YouTube downloader and search tool
-- **Show-Menu**: Optional, for interactive search result selection
+- **fzf**: Recommended search picker
+- **Microsoft.PowerShell.ConsoleGuiTools**: Optional alternative picker
+- **Basic Prompt**: Built-in final fallback when no picker is installed
+
+### Deprecated
+- **Show-Menu**: Removed from the core repo. Start-MPVStream now uses configured picker providers with a built-in numbered prompt fallback.
 
 ## Contributing
 

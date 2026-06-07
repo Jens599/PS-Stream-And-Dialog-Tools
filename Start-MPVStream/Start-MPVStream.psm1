@@ -30,6 +30,9 @@ function Start-MPVStream {
         [Alias('c')]
         [string]$CookiePath,
 
+        [Parameter()]
+        [switch]$Config,
+
         [Alias('s')]
         [switch]$Search,
 
@@ -62,6 +65,23 @@ function Start-MPVStream {
     )
 
     process {
+        $configData = Read-MPVStreamConfig
+
+        if ($Config) {
+            Invoke-MPVStreamConfig -Config $configData
+            return
+        }
+
+        if (-not $PSBoundParameters.ContainsKey('Size') -and $configData.size) { $Size = $configData.size }
+        if (-not $PSBoundParameters.ContainsKey('YtdlFormat') -and $configData.ytdlFormat) { $YtdlFormat = $configData.ytdlFormat }
+        if (-not $PSBoundParameters.ContainsKey('MaxResults') -and $configData.maxResults) { $MaxResults = $configData.maxResults }
+        if (-not $PSBoundParameters.ContainsKey('AudioOnly') -and $configData.audioOnly) { $AudioOnly = $true }
+        if (-not $PSBoundParameters.ContainsKey('Background') -and $configData.background) { $Background = $true }
+        if (-not $PSBoundParameters.ContainsKey('Loop') -and $configData.loop) { $Loop = $true }
+        if (-not $PSBoundParameters.ContainsKey('HardwareAccel') -and $configData.hardwareAccel) { $HardwareAccel = $true }
+        if (-not $PSBoundParameters.ContainsKey('ReversePlaylist') -and $configData.reversePlaylist) { $ReversePlaylist = $true }
+        if (-not $PSBoundParameters.ContainsKey('NoSubtitles') -and $configData.noSubtitles) { $NoSubtitles = $true }
+
         # --- 0. Help Check / Config Mode ---
         $isConfigOnly = [string]::IsNullOrWhiteSpace($Url) -and $CookiePath
         if ([string]::IsNullOrWhiteSpace($Url)) {
@@ -88,21 +108,20 @@ function Start-MPVStream {
         }
         
         # --- Cookie Configuration ---
-        $configDir = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Start-MPVStream'
-        $configFile = Join-Path $configDir 'config.json'
+        $configFile = Get-MPVStreamConfigPath
         $legacyConfigFile = Join-Path $env:USERPROFILE '.mpvstream-config.json'
         $finalCookiePath = $null
         
-        # Read from config file if it exists
-        $configFileToRead = if (Test-Path $configFile -PathType Leaf) { $configFile } elseif (Test-Path $legacyConfigFile -PathType Leaf) { $legacyConfigFile } else { $null }
-        if ($configFileToRead) {
+        if ($configData.cookiePath -and (Test-Path $configData.cookiePath -PathType Leaf)) {
+            $finalCookiePath = $configData.cookiePath
+        } elseif (-not (Test-Path $configFile -PathType Leaf) -and (Test-Path $legacyConfigFile -PathType Leaf)) {
             try {
-                $config = Get-Content -LiteralPath $configFileToRead -Raw | ConvertFrom-Json
-                if ($config.cookiePath -and (Test-Path $config.cookiePath -PathType Leaf)) {
-                    $finalCookiePath = $config.cookiePath
+                $legacyConfig = Get-Content -LiteralPath $legacyConfigFile -Raw | ConvertFrom-Json
+                if ($legacyConfig.cookiePath -and (Test-Path $legacyConfig.cookiePath -PathType Leaf)) {
+                    $finalCookiePath = $legacyConfig.cookiePath
                 }
             } catch {
-                Write-Warning "Failed to read config file: $configFileToRead"
+                Write-Warning "Failed to read config file: $legacyConfigFile"
             }
         }
         
@@ -113,11 +132,8 @@ function Start-MPVStream {
             
             # Save to config file
             try {
-                if (-not (Test-Path $configDir -PathType Container)) {
-                    New-Item -ItemType Directory -Path $configDir -Force | Out-Null
-                }
-                $config = @{ cookiePath = $finalCookiePath } | ConvertTo-Json
-                $config | Out-File -FilePath $configFile -Encoding UTF8
+                $configData.cookiePath = $finalCookiePath
+                Save-MPVStreamConfig -Config $configData
                 Write-Host "→ Cookie path saved to: $configFile" -ForegroundColor Green
             } catch {
                 Write-Warning "Failed to save config file: $configFile"
@@ -184,13 +200,6 @@ function Start-MPVStream {
         # --- 3. Search Logic ---
         if ($Search) {
             try {
-                if (-not (Get-Command Show-Menu -ErrorAction SilentlyContinue)) {
-                    $showMenuManifest = Join-Path (Split-Path -Parent $PSScriptRoot) 'Show-Menu\Show-Menu.psd1'
-                    if (Test-Path -LiteralPath $showMenuManifest -PathType Leaf) {
-                        Import-Module $showMenuManifest -ErrorAction SilentlyContinue
-                    }
-                }
-
                 $encodedQuery = [uri]::EscapeDataString($Url) 
                 
                 if ($Playlist) {
@@ -228,16 +237,11 @@ function Start-MPVStream {
 
                     $TitleArray = $choices.Values.MenuTitle 
                     if ($TitleArray) {
-                        if (-not (Get-Command Show-Menu -ErrorAction SilentlyContinue)) {
-                            Write-Warning "Show-Menu function not found. Using first result."
-                            $resultIndex = 0
-                        } else {
-                            $resultIndex = Show-Menu -Options $TitleArray -Title "Playlist Results: $Url" -ReturnIndex 
-                        }
-                        if ($null -eq $resultIndex) { return }
+                        $selectedResult = Select-MPVStreamSearchResult -Items @($choices.Values) -Title "Playlist Results: $Url" -Config $configData
+                        if ($null -eq $selectedResult) { return }
 
-                        $targetUrl = $choices[$resultIndex].Url
-                        Write-Host "Match [$($choices[$resultIndex].Type)]: $($choices[$resultIndex].Title)" -ForegroundColor Cyan 
+                        $targetUrl = $selectedResult.Url
+                        Write-Host "Match [$($selectedResult.Type)]: $($selectedResult.Title)" -ForegroundColor Cyan 
                     } else { return }
                 } else {
                     # Standard mixed search: videos, playlists, and channels.
@@ -266,16 +270,11 @@ function Start-MPVStream {
                     }
                     $TitleArray = $choices.Values.MenuTitle
                     if ($TitleArray) {
-                        if (-not (Get-Command Show-Menu -ErrorAction SilentlyContinue)) {
-                            Write-Warning "Show-Menu function not found. Using first result."
-                            $resultIndex = 0
-                        } else {
-                            $resultIndex = Show-Menu -Options $TitleArray -Title "Search Results: $Url" -ReturnIndex
-                        }
-                        if ($null -eq $resultIndex) { return }
+                        $selectedResult = Select-MPVStreamSearchResult -Items @($choices.Values) -Title "Search Results: $Url" -Config $configData
+                        if ($null -eq $selectedResult) { return }
 
-                        $targetUrl = $choices[$resultIndex].Url 
-                        Write-Host "Match [$($choices[$resultIndex].Type)]: $($choices[$resultIndex].Title)" -ForegroundColor Cyan 
+                        $targetUrl = $selectedResult.Url 
+                        Write-Host "Match [$($selectedResult.Type)]: $($selectedResult.Title)" -ForegroundColor Cyan 
                     } else { return }
                 }
             } catch {
@@ -380,6 +379,7 @@ function Write-MPVStreamHelp {
     Write-Host "    $("{0,-22}" -f "-MaxResults, -max <num>") Number of search results (1-50, default: 10)" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-ReversePlaylist, -r") Reverse playlist order" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-CookiePath, -c <path>") Path to cookie file (saved persistently)" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-Config, --config") Interactive persistent configuration" -ForegroundColor $cDesc 
     Write-Host "`nExamples" -ForegroundColor White 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s" -ForegroundColor $cDesc 
@@ -387,6 +387,364 @@ function Write-MPVStreamHelp {
     Write-Host "    play 'https://youtu.be/dQw4w9WgXcQ' -sz Small -f 720p" -ForegroundColor $cDesc 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' -c cookies.txt" -ForegroundColor $cDesc 
     Write-Host "    play -c .\Downloads\Compressed\cookies.txt" -ForegroundColor $cDesc 
+    Write-Host "    play --config" -ForegroundColor $cDesc 
+}
+
+function Get-MPVStreamConfigPath {
+    Join-Path (Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Start-MPVStream') 'config.json'
+}
+
+function Get-MPVStreamDefaultConfig {
+    [pscustomobject]@{
+        cookiePath      = $null
+        menuProvider    = 'fzf'
+        size            = 'PIP'
+        ytdlFormat      = '480p'
+        maxResults      = 10
+        audioOnly       = $false
+        background      = $false
+        loop            = $false
+        hardwareAccel   = $false
+        reversePlaylist = $false
+        noSubtitles     = $false
+    }
+}
+
+function Read-MPVStreamConfig {
+    $config = Get-MPVStreamDefaultConfig
+    $configPath = Get-MPVStreamConfigPath
+
+    if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
+        return $config
+    }
+
+    try {
+        $savedConfig = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+        foreach ($property in $config.PSObject.Properties.Name) {
+            if ($savedConfig.PSObject.Properties.Name -contains $property) {
+                $config.$property = $savedConfig.$property
+            }
+        }
+        $config.menuProvider = Normalize-MPVStreamMenuProvider $config.menuProvider
+    } catch {
+        Write-Warning "Failed to read config file: $configPath"
+    }
+
+    return $config
+}
+
+function Save-MPVStreamConfig {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Config
+    )
+
+    $configPath = Get-MPVStreamConfigPath
+    $configDir = Split-Path -Parent $configPath
+    if (-not (Test-Path -LiteralPath $configDir -PathType Container)) {
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+    }
+
+    $Config | ConvertTo-Json | Out-File -LiteralPath $configPath -Encoding UTF8
+}
+
+function Invoke-MPVStreamConfig {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Config
+    )
+
+    while ($true) {
+        $options = @(
+            "Search UI Provider: $(Get-MPVStreamMenuProviderLabel $Config.menuProvider)"
+            "Cookie Path: $(if ($Config.cookiePath) { $Config.cookiePath } else { '<not set>' })"
+            "Default Window Size: $($Config.size)"
+            "Default Quality / Format: $($Config.ytdlFormat)"
+            "Max Search Results: $($Config.maxResults)"
+            "Audio Only: $($Config.audioOnly)"
+            "Background Playback: $($Config.background)"
+            "Loop Playback: $($Config.loop)"
+            "Hardware Acceleration: $($Config.hardwareAccel)"
+            "Reverse Playlist: $($Config.reversePlaylist)"
+            "Subtitles Disabled: $($Config.noSubtitles)"
+            'Show Current Config'
+            'Reset Config'
+            'Save and Exit'
+        )
+
+        $selection = Select-MPVStreamMenuIndex -Options $options -Title 'Start-MPVStream Config' -Config $Config
+        if ($null -eq $selection) { return }
+
+        switch ($selection) {
+            0 { Set-MPVStreamMenuProvider -Config $Config }
+            1 { Set-MPVStreamCookiePath -Config $Config }
+            2 { $Config.size = Select-MPVStreamConfigValue -Title 'Default Window Size' -Options @('PIP', 'Small', 'Medium', 'Max') -CurrentValue $Config.size }
+            3 { $Config.ytdlFormat = Select-MPVStreamConfigValue -Title 'Default Quality / Format' -Options @('480p', '720p', '1080p', 'best', 'audio') -CurrentValue $Config.ytdlFormat }
+            4 { Set-MPVStreamMaxResults -Config $Config }
+            5 { $Config.audioOnly = -not $Config.audioOnly }
+            6 { $Config.background = -not $Config.background }
+            7 { $Config.loop = -not $Config.loop }
+            8 { $Config.hardwareAccel = -not $Config.hardwareAccel }
+            9 { $Config.reversePlaylist = -not $Config.reversePlaylist }
+            10 { $Config.noSubtitles = -not $Config.noSubtitles }
+            11 { $Config | Format-List; Read-Host 'Press Enter to continue' | Out-Null }
+            12 { $Config = Get-MPVStreamDefaultConfig }
+            13 {
+                Save-MPVStreamConfig -Config $Config
+                Write-Host "Saved config: $(Get-MPVStreamConfigPath)" -ForegroundColor Green
+                return
+            }
+        }
+    }
+}
+
+function Select-MPVStreamConfigValue {
+    param(
+        [string]$Title,
+        [string[]]$Options,
+        [string]$CurrentValue
+    )
+
+    $config = Read-MPVStreamConfig
+    $selection = Select-MPVStreamMenuIndex -Options $Options -Title "$Title (current: $CurrentValue)" -Config $config
+    if ($null -eq $selection) { return $CurrentValue }
+    return $Options[$selection]
+}
+
+function Set-MPVStreamCookiePath {
+    param([pscustomobject]$Config)
+
+    $path = Read-Host 'Cookie path (blank to clear)'
+    if ([string]::IsNullOrWhiteSpace($path)) {
+        $Config.cookiePath = $null
+        return
+    }
+
+    if (-not [System.IO.Path]::IsPathRooted($path)) {
+        try { $path = (Resolve-Path $path -ErrorAction Stop | Select-Object -ExpandProperty Path) } catch { }
+    }
+
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        Write-Warning "Cookie file not found: $path"
+        Read-Host 'Press Enter to continue' | Out-Null
+        return
+    }
+
+    $Config.cookiePath = $path
+}
+
+function Set-MPVStreamMaxResults {
+    param([pscustomobject]$Config)
+
+    $value = Read-Host "Max search results (1-50, current: $($Config.maxResults))"
+    $parsed = 0
+    if ([int]::TryParse($value, [ref]$parsed) -and $parsed -ge 1 -and $parsed -le 50) {
+        $Config.maxResults = $parsed
+    } else {
+        Write-Warning 'Please enter a number from 1 to 50.'
+        Read-Host 'Press Enter to continue' | Out-Null
+    }
+}
+
+function Set-MPVStreamMenuProvider {
+    param([pscustomobject]$Config)
+
+    $labels = @('fzf', 'Microsoft.PowerShell.ConsoleGuiTools', 'Out-ConsoleGridView', 'Basic Prompt')
+    $selection = Select-MPVStreamMenuIndex -Options $labels -Title 'Search UI Provider' -Config $Config
+    if ($null -eq $selection) { return }
+
+    $provider = Normalize-MPVStreamMenuProvider $labels[$selection]
+    if (-not (Test-MPVStreamMenuProvider $provider)) {
+        $install = Read-Host "$(Get-MPVStreamMenuProviderLabel $provider) is not installed. Install now? [Y/N]"
+        if ($install -match '^(y|yes)$') {
+            Install-MPVStreamMenuProvider $provider
+        }
+    }
+
+    $Config.menuProvider = $provider
+}
+
+function Normalize-MPVStreamMenuProvider {
+    param([string]$Provider)
+
+    switch -Regex ($Provider) {
+        '^fzf$' { return 'fzf' }
+        '^Microsoft\.PowerShell\.ConsoleGuiTools$' { return 'ConsoleGuiTools' }
+        '^ConsoleGuiTools$' { return 'ConsoleGuiTools' }
+        '^Out-?ConsoleGridView$' { return 'OutConsoleGridView' }
+        '^Show-?Menu$' { return 'BasicPrompt' }
+        '^Basic\s*Prompt$' { return 'BasicPrompt' }
+        '^BasicPrompt$' { return 'BasicPrompt' }
+        default { return 'fzf' }
+    }
+}
+
+function Get-MPVStreamMenuProviderLabel {
+    param([string]$Provider)
+
+    switch (Normalize-MPVStreamMenuProvider $Provider) {
+        'fzf' { return 'fzf' }
+        'ConsoleGuiTools' { return 'Microsoft.PowerShell.ConsoleGuiTools' }
+        'OutConsoleGridView' { return 'Out-ConsoleGridView' }
+        'BasicPrompt' { return 'Basic Prompt' }
+        default { return 'fzf' }
+    }
+}
+
+function Test-MPVStreamMenuProvider {
+    param([string]$Provider)
+
+    switch (Normalize-MPVStreamMenuProvider $Provider) {
+        'fzf' { return [bool](Get-Command fzf -ErrorAction SilentlyContinue) }
+        'ConsoleGuiTools' { return [bool](Get-Command Out-ConsoleGridView -ErrorAction SilentlyContinue) }
+        'OutConsoleGridView' { return [bool](Get-Command Out-ConsoleGridView -ErrorAction SilentlyContinue) }
+        'BasicPrompt' { return $true }
+    }
+}
+
+function Install-MPVStreamMenuProvider {
+    param([string]$Provider)
+
+    switch (Normalize-MPVStreamMenuProvider $Provider) {
+        'fzf' { winget install junegunn.fzf }
+        'ConsoleGuiTools' { Install-Module Microsoft.PowerShell.ConsoleGuiTools -Scope CurrentUser }
+        'OutConsoleGridView' { Install-Module Microsoft.PowerShell.ConsoleGuiTools -Scope CurrentUser }
+        'BasicPrompt' { Write-Host 'Basic prompt is built into PowerShell.' -ForegroundColor Green }
+    }
+}
+
+function Select-MPVStreamSearchResult {
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$Items,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Title,
+
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Config
+    )
+
+    $configuredProvider = Normalize-MPVStreamMenuProvider $Config.menuProvider
+    $providers = @($configuredProvider, 'fzf', 'ConsoleGuiTools', 'OutConsoleGridView', 'BasicPrompt') | Select-Object -Unique
+    $providerToUse = $null
+
+    foreach ($provider in $providers) {
+        if (-not (Test-MPVStreamMenuProvider $provider)) {
+            if ($provider -eq $configuredProvider) {
+                $install = Read-Host "$(Get-MPVStreamMenuProviderLabel $provider) is not installed. Install now? [Y/N]"
+                if ($install -match '^(y|yes)$') {
+                    Install-MPVStreamMenuProvider $provider
+                }
+            }
+
+            if (-not (Test-MPVStreamMenuProvider $provider)) { continue }
+        }
+
+        $providerToUse = $provider
+        break
+    }
+
+    if (-not $providerToUse) {
+        Write-Warning 'No interactive selector is available. Using first result.'
+        return $Items[0]
+    }
+
+    switch ($providerToUse) {
+        'fzf' { return (Select-MPVStreamSearchResultWithFzf -Items $Items -Title $Title) }
+        'ConsoleGuiTools' { return (Select-MPVStreamSearchResultWithConsoleGridView -Items $Items -Title $Title) }
+        'OutConsoleGridView' { return (Select-MPVStreamSearchResultWithConsoleGridView -Items $Items -Title $Title) }
+        'BasicPrompt' { return (Select-MPVStreamSearchResultWithBasicPrompt -Items $Items -Title $Title) }
+    }
+}
+
+function Select-MPVStreamMenuIndex {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Options,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Title,
+
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Config
+    )
+
+    $items = for ($i = 0; $i -lt $Options.Count; $i++) {
+        [pscustomobject]@{
+            Index     = $i
+            Title     = $Options[$i]
+            Type      = 'Option'
+            Url       = $null
+            MenuTitle = $Options[$i]
+        }
+    }
+
+    $selected = Select-MPVStreamSearchResult -Items @($items) -Title $Title -Config $Config
+    if ($null -eq $selected) { return $null }
+    return $selected.Index
+}
+
+function Select-MPVStreamSearchResultWithFzf {
+    param([object[]]$Items, [string]$Title)
+
+    $lines = for ($i = 0; $i -lt $Items.Count; $i++) {
+        '{0:00} {1}' -f ($i + 1), $Items[$i].MenuTitle
+    }
+
+    $selected = $lines | fzf `
+        --height 40% `
+        --layout reverse `
+        --border rounded `
+        --info inline `
+        --header $Title `
+        --prompt 'Search> ' `
+        --pointer '>' `
+        --marker '+'
+    if (-not $selected) { return $null }
+
+    if ($selected -match '^(\d+)\s') {
+        return $Items[[int]$Matches[1] - 1]
+    }
+
+    return $null
+}
+
+function Select-MPVStreamSearchResultWithConsoleGridView {
+    param([object[]]$Items, [string]$Title)
+
+    $gridItems = for ($i = 0; $i -lt $Items.Count; $i++) {
+        [pscustomobject]@{
+            Index = $i
+            Type  = $Items[$i].Type
+            Title = $Items[$i].Title
+            Url   = $Items[$i].Url
+        }
+    }
+
+    $selected = $gridItems | Out-ConsoleGridView -Title $Title -OutputMode Single
+    if ($null -eq $selected) { return $null }
+    return $Items[$selected.Index]
+}
+
+function Select-MPVStreamSearchResultWithBasicPrompt {
+    param([object[]]$Items, [string]$Title)
+
+    Write-Host "`n$Title" -ForegroundColor Cyan
+    for ($i = 0; $i -lt $Items.Count; $i++) {
+        Write-Host ('  {0,2}. {1}' -f ($i + 1), $Items[$i].MenuTitle)
+    }
+
+    $answer = Read-Host 'Select number or press Enter to cancel'
+    if ([string]::IsNullOrWhiteSpace($answer)) { return $null }
+
+    $index = 0
+    if ([int]::TryParse($answer, [ref]$index) -and $index -ge 1 -and $index -le $Items.Count) {
+        return $Items[$index - 1]
+    }
+
+    Write-Warning 'Invalid selection.'
+    return $null
 }
 
 function Join-NativeArgument {

@@ -3,7 +3,6 @@
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $moduleManifests = @(
     Join-Path $projectRoot 'Add-Path\Add-Path.psd1'
-    Join-Path $projectRoot 'Show-Menu\Show-Menu.psd1'
     Join-Path $projectRoot 'Start-MPVStream\Start-MPVStream.psd1'
     Join-Path $projectRoot 'ytm-dl\ytm-dl.psd1'
 )

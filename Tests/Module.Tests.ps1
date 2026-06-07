@@ -1,14 +1,12 @@
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $moduleManifests = @(
     Join-Path $repoRoot 'Add-Path\Add-Path.psd1'
-    Join-Path $repoRoot 'Show-Menu\Show-Menu.psd1'
     Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1'
     Join-Path $repoRoot 'ytm-dl\ytm-dl.psd1'
 )
 
 $moduleSources = @(
     Join-Path $repoRoot 'Add-Path\Add-Path.psm1'
-    Join-Path $repoRoot 'Show-Menu\Show-Menu.psm1'
     Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psm1'
     Join-Path $repoRoot 'ytm-dl\ytm-dl.psm1'
 )
@@ -43,12 +41,10 @@ Describe 'PowerShell module source' {
 Describe 'Public module exports' {
     It 'exports intended commands and aliases' {
         Import-Module (Join-Path $repoRoot 'Add-Path\Add-Path.psd1') -Force
-        Import-Module (Join-Path $repoRoot 'Show-Menu\Show-Menu.psd1') -Force
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
         Import-Module (Join-Path $repoRoot 'ytm-dl\ytm-dl.psd1') -Force
 
         (Get-Command Add-Path -ErrorAction Stop).CommandType | Should Be 'Function'
-        (Get-Command Show-Menu -ErrorAction Stop).CommandType | Should Be 'Function'
         (Get-Command Start-MPVStream -ErrorAction Stop).CommandType | Should Be 'Function'
         (Get-Command Invoke-YtmDownload -ErrorAction Stop).CommandType | Should Be 'Function'
         (Get-Alias play -ErrorAction Stop).ResolvedCommandName | Should Be 'Start-MPVStream'
@@ -63,7 +59,6 @@ Describe 'Profile loader' {
         . (Join-Path $repoRoot 'Profile\PS-Stream-And-Dialog-Tools.profile.ps1')
 
         (Get-Command Add-Path -ErrorAction Stop).CommandType | Should Be 'Function'
-        (Get-Command Show-Menu -ErrorAction Stop).CommandType | Should Be 'Function'
         (Get-Command Start-MPVStream -ErrorAction Stop).CommandType | Should Be 'Function'
         (Get-Command Invoke-YtmDownload -ErrorAction Stop).CommandType | Should Be 'Function'
         (Get-Alias play -ErrorAction Stop).ResolvedCommandName | Should Be 'Start-MPVStream'
@@ -77,6 +72,10 @@ Describe 'Start-MPVStream behavior' {
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 
         InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig {
+                Get-MPVStreamDefaultConfig
+            }
+
             function yt-dlp {
                 $script:ytdlpArgs = $args
                 return @(
@@ -86,15 +85,15 @@ Describe 'Start-MPVStream behavior' {
                 )
             }
 
-            function Show-Menu {
+            function Select-MPVStreamSearchResult {
                 param(
-                    [string[]]$Options,
+                    [object[]]$Items,
                     [string]$Title,
-                    [switch]$ReturnIndex
+                    [pscustomobject]$Config
                 )
 
-                $script:menuOptions = $Options
-                return 1
+                $script:menuOptions = $Items.MenuTitle
+                return $Items[1]
             }
 
             function mpv {
@@ -111,7 +110,7 @@ Describe 'Start-MPVStream behavior' {
             $script:mpvArgs[0] | Should Be 'https://www.youtube.com/watch?v=video123'
 
             Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
-            Remove-Item Function:\Show-Menu -ErrorAction SilentlyContinue
+            Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
             Remove-Item Function:\mpv -ErrorAction SilentlyContinue
             Remove-Variable ytdlpArgs -Scope Script -ErrorAction SilentlyContinue
             Remove-Variable menuOptions -Scope Script -ErrorAction SilentlyContinue
@@ -127,11 +126,56 @@ Describe 'Start-MPVStream behavior' {
         $source | Should Match 'if \(\$Search -and -not \(Get-Command yt-dlp'
     }
 
-    It 'attempts to load Show-Menu for search selection' {
-        $source = Get-Content -LiteralPath (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psm1') -Raw
+    It 'exposes modular persistent config settings' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 
-        $source | Should Match 'Get-Command Show-Menu'
-        $source | Should Match "Show-Menu\\Show-Menu.psd1"
-        $source | Should Match 'Import-Module \$showMenuManifest'
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Config' | Should Be $true
+
+        InModuleScope Start-MPVStream {
+            $config = Get-MPVStreamDefaultConfig
+
+            $config.menuProvider | Should Be 'fzf'
+            $config.size | Should Be 'PIP'
+            $config.ytdlFormat | Should Be '480p'
+            $config.maxResults | Should Be 10
+            Normalize-MPVStreamMenuProvider 'fzf' | Should Be 'fzf'
+            Normalize-MPVStreamMenuProvider 'Microsoft.PowerShell.ConsoleGuiTools' | Should Be 'ConsoleGuiTools'
+            Normalize-MPVStreamMenuProvider 'Out-ConsoleGridView' | Should Be 'OutConsoleGridView'
+            Normalize-MPVStreamMenuProvider 'Show-Menu' | Should Be 'BasicPrompt'
+            Normalize-MPVStreamMenuProvider 'Basic Prompt' | Should Be 'BasicPrompt'
+            Normalize-MPVStreamMenuProvider 'not-real' | Should Be 'fzf'
+        }
+    }
+
+    It 'does not fallback to the first result when selection is cancelled' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            $script:providerChecks = @()
+
+            function Test-MPVStreamMenuProvider {
+                param([string]$Provider)
+                $script:providerChecks += (Normalize-MPVStreamMenuProvider $Provider)
+                (Normalize-MPVStreamMenuProvider $Provider) -eq 'BasicPrompt'
+            }
+
+            function Select-MPVStreamSearchResultWithBasicPrompt {
+                param([object[]]$Items, [string]$Title)
+                return $null
+            }
+
+            $config = Get-MPVStreamDefaultConfig
+            $config.menuProvider = 'BasicPrompt'
+            $items = @(
+                [pscustomobject]@{ Title = 'First'; Type = 'Video'; Url = 'https://example.test/first'; MenuTitle = '[Video] First' }
+            )
+
+            Select-MPVStreamSearchResult -Items $items -Title 'Search Results: test' -Config $config | Should Be $null
+            $script:providerChecks.Count | Should Be 1
+
+            Remove-Item Function:\Test-MPVStreamMenuProvider -ErrorAction SilentlyContinue
+            Remove-Item Function:\Select-MPVStreamSearchResultWithBasicPrompt -ErrorAction SilentlyContinue
+            Remove-Variable providerChecks -Scope Script -ErrorAction SilentlyContinue
+        }
     }
 }
