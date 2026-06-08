@@ -66,16 +66,29 @@ function Invoke-MPVStreamPlayer {
         return
     }
 
+    if ($Background) {
+        $processStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $processStartInfo.FileName = $Player.Name
+        $processStartInfo.UseShellExecute = $false
+        $processStartInfo.CreateNoWindow = $true
+
+        foreach ($item in $Argument) {
+            [void]$processStartInfo.ArgumentList.Add($item)
+        }
+
+        $process = [System.Diagnostics.Process]::Start($processStartInfo)
+        if ($process) { $process.Dispose() }
+        return
+    }
+
     $startProcessParameters = @{
         FilePath     = $Player.Name
         ArgumentList = Join-NativeArgument $Argument
         ErrorAction  = 'Stop'
     }
 
-    if (-not $Background) {
-        $startProcessParameters.Wait = $true
-        $startProcessParameters.NoNewWindow = $true
-    }
+    $startProcessParameters.Wait = $true
+    $startProcessParameters.NoNewWindow = $true
 
     Start-Process @startProcessParameters
 }
