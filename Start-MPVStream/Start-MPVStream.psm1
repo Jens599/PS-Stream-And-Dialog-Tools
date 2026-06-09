@@ -16,6 +16,7 @@ $privateFiles = @(
     'Private\Cookies.ps1'
     'Private\History.ps1'
     'Private\MpvArgs.ps1'
+    'Private\Doctor.ps1'
 )
 
 foreach ($privateFile in $privateFiles) {
@@ -47,6 +48,10 @@ function Start-MPVStream {
         [Parameter()]
         [Alias('cfg')]
         [switch]$Config,
+
+        [Parameter()]
+        [Alias('doc')]
+        [switch]$Doctor,
 
         [Parameter()]
         [Alias('cfgex')]
@@ -142,6 +147,11 @@ function Start-MPVStream {
 
     process {
         $configData = Read-MPVStreamConfig
+
+        if ($Doctor) {
+            Invoke-MPVStreamDoctor -Config $configData -ScriptRoot $PSScriptRoot
+            return
+        }
 
         if ($ConfigExport) {
             Export-MPVStreamConfig -Config $configData -Path $ConfigExport
