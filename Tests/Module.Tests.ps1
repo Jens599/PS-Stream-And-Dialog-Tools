@@ -358,6 +358,73 @@ Describe 'Start-MPVStream behavior' {
         }
     }
 
+    It 'can load more interactive search results before selection' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig {
+                Get-MPVStreamDefaultConfig
+            }
+
+            function yt-dlp {
+                $script:ytdlpRanges += $args[5]
+                if ($args[5] -eq '1:2') {
+                    return @(
+                        "First Result`tfirst123`tYoutube`thttps://www.youtube.com/watch?v=first123`t1:00`tChannel One`t100",
+                        "Second Result`tsecond123`tYoutube`thttps://www.youtube.com/watch?v=second123`t2:00`tChannel Two`t200"
+                    )
+                }
+
+                return @(
+                    "First Result`tfirst123`tYoutube`thttps://www.youtube.com/watch?v=first123`t1:00`tChannel One`t100",
+                    "Second Result`tsecond123`tYoutube`thttps://www.youtube.com/watch?v=second123`t2:00`tChannel Two`t200",
+                    "Third Result`tthird123`tYoutube`thttps://www.youtube.com/watch?v=third123`t3:00`tChannel Three`t300",
+                    "Fourth Result`tfourth123`tYoutube`thttps://www.youtube.com/watch?v=fourth123`t4:00`tChannel Four`t400"
+                )
+            }
+
+            function Select-MPVStreamSearchResult {
+                param(
+                    [object[]]$Items,
+                    [string]$Title,
+                    [pscustomobject]$Config
+                )
+
+                $script:menuCounts += $Items.Count
+                if ($script:menuCounts.Count -eq 1) {
+                    return $Items[-1]
+                }
+
+                return $Items[3]
+            }
+
+            function mpv {
+                $script:mpvArgs = $args
+            }
+
+            function Add-MPVStreamHistoryItem { }
+
+            $script:ytdlpRanges = @()
+            $script:menuCounts = @()
+
+            Start-MPVStream 'more results' -Search -MaxResults 2 -Size Small -YtdlFormat audio
+
+            $script:ytdlpRanges[0] | Should Be '1:2'
+            $script:ytdlpRanges[1] | Should Be '1:4'
+            $script:menuCounts[0] | Should Be 3
+            $script:menuCounts[1] | Should Be 5
+            $script:mpvArgs[-1] | Should Be 'https://www.youtube.com/watch?v=fourth123'
+
+            Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
+            Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
+            Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
+            Remove-Variable ytdlpRanges -Scope Script -ErrorAction SilentlyContinue
+            Remove-Variable menuCounts -Scope Script -ErrorAction SilentlyContinue
+            Remove-Variable mpvArgs -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
     It 'filters search results by type' {
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 

@@ -221,73 +221,23 @@ function Start-MPVStream {
                 $encodedQuery = [uri]::EscapeDataString($Url) 
                 
                 if ($Playlist) {
-                    # Search for Playlists specifically using the 'sp' parameter 
-                    $searchParameters = @{
-                        EncodedQuery = $encodedQuery
-                        Playlist     = $Playlist
-                        MaxResults   = $MaxResults
-                        CookiePath   = $finalCookiePath
-                    }
-                    if ($Type) { $searchParameters.Type = $Type }
-                    $searchResults = @(Search-MPVStreamYouTube @searchParameters)
+                    # Search for Playlists specifically using the 'sp' parameter.
+                    $selectedResult = Select-MPVStreamYouTubeSearchResult -EncodedQuery $encodedQuery -Playlist:$Playlist -MaxResults $MaxResults -CookiePath $finalCookiePath -Type $Type -Config $configData -First:$First -Title "Playlist Results: $Url" -EmptyMessage 'No playlists found for that search.'
+                    if ($null -eq $selectedResult) { return }
 
-                    if ($searchResults.Count -eq 0) {
-                        Write-Host "No playlists found for that search." -ForegroundColor Red 
-                        return
-                    }
-
-                    Write-Host "Search results found: $($searchResults.Count)" -ForegroundColor Yellow 
-
-                    $choices = [ordered]@{}
-
-                    foreach ($result in $searchResults) {
-                        $choices.Add($choices.Count, $result)
-                    }
-
-                    $TitleArray = $choices.Values.MenuTitle 
-                    if ($TitleArray) {
-                        if ($First) {
-                            $selectedResult = @($choices.Values)[0]
-                        } else {
-                            $selectedResult = Select-MPVStreamSearchResult -Items @($choices.Values) -Title "Playlist Results: $Url" -Config $configData
-                        }
-                        if ($null -eq $selectedResult) { return }
-
-                        $targetUrl = $selectedResult.Url
-                        $historyTitle = $selectedResult.Title
-                        $historyType = $selectedResult.Type
-                        Write-Host "Match [$($selectedResult.Type)]: $($selectedResult.Title)" -ForegroundColor Cyan 
-                    } else { return }
+                    $targetUrl = $selectedResult.Url
+                    $historyTitle = $selectedResult.Title
+                    $historyType = $selectedResult.Type
+                    Write-Host "Match [$($selectedResult.Type)]: $($selectedResult.Title)" -ForegroundColor Cyan
                 } else {
                     # Standard mixed search: videos, playlists, and channels.
-                    $searchParameters = @{
-                        EncodedQuery = $encodedQuery
-                        Playlist     = $Playlist
-                        MaxResults   = $MaxResults
-                        CookiePath   = $finalCookiePath
-                    }
-                    if ($Type) { $searchParameters.Type = $Type }
-                    $searchResults = @(Search-MPVStreamYouTube @searchParameters)
-                    
-                    $choices = [ordered]@{}
+                    $selectedResult = Select-MPVStreamYouTubeSearchResult -EncodedQuery $encodedQuery -Playlist:$Playlist -MaxResults $MaxResults -CookiePath $finalCookiePath -Type $Type -Config $configData -First:$First -Title "Search Results: $Url" -EmptyMessage 'No results found for that search.'
+                    if ($null -eq $selectedResult) { return }
 
-                    foreach ($result in $searchResults) {
-                        $choices.Add($choices.Count, $result)
-                    }
-                    $TitleArray = $choices.Values.MenuTitle
-                    if ($TitleArray) {
-                        if ($First) {
-                            $selectedResult = @($choices.Values)[0]
-                        } else {
-                            $selectedResult = Select-MPVStreamSearchResult -Items @($choices.Values) -Title "Search Results: $Url" -Config $configData
-                        }
-                        if ($null -eq $selectedResult) { return }
-
-                        $targetUrl = $selectedResult.Url 
-                        $historyTitle = $selectedResult.Title
-                        $historyType = $selectedResult.Type
-                        Write-Host "Match [$($selectedResult.Type)]: $($selectedResult.Title)" -ForegroundColor Cyan 
-                    } else { return }
+                    $targetUrl = $selectedResult.Url
+                    $historyTitle = $selectedResult.Title
+                    $historyType = $selectedResult.Type
+                    Write-Host "Match [$($selectedResult.Type)]: $($selectedResult.Title)" -ForegroundColor Cyan
                 }
             } catch {
                 Write-Error "Search failed: $($_.Exception.Message)" 
