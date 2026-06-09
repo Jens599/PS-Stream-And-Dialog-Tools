@@ -495,7 +495,22 @@ Describe 'Start-MPVStream behavior' {
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 
         InModuleScope Start-MPVStream {
-            function mpvnet.com { }
+            function Get-Command {
+                param(
+                    [string]$Name,
+                    [System.Management.Automation.ActionPreference]$ErrorAction
+                )
+
+                if ($Name -eq 'mpvnet.com') {
+                    return [pscustomobject]@{
+                        Name        = 'mpvnet.com'
+                        Source      = 'mpvnet.com'
+                        CommandType = 'Function'
+                    }
+                }
+
+                return $null
+            }
 
             $fallback = Resolve-MPVStreamPlayer
             $configured = Resolve-MPVStreamPlayer -PlayerPath 'mpvnet.com'
@@ -503,7 +518,7 @@ Describe 'Start-MPVStream behavior' {
             $fallback.Name | Should Be 'mpvnet.com'
             $configured.Name | Should Be 'mpvnet.com'
 
-            Remove-Item Function:\mpvnet.com -ErrorAction SilentlyContinue
+            Remove-Item Function:\Get-Command -ErrorAction SilentlyContinue
         }
     }
 
