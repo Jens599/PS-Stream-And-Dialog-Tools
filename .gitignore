@@ -4,6 +4,10 @@
 # Except .gitignore
 !.gitignore
 
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
+
 # And the directories
 !Show-Menu/
 !Show-Menu/*
