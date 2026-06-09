@@ -142,6 +142,7 @@ Describe 'Start-MPVStream behavior' {
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'SubtitleLanguage' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Clipboard' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'History' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'ClearHistory' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Last' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'SelectOnly' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'CopyUrl' | Should Be $true
@@ -174,6 +175,7 @@ Describe 'Start-MPVStream behavior' {
             ($command.Parameters['PassThru'].Aliases -contains 'pt') | Should Be $true
             ($command.Parameters['Clipboard'].Aliases -contains 'cb') | Should Be $true
             ($command.Parameters['History'].Aliases -contains 'hi') | Should Be $true
+            ($command.Parameters['ClearHistory'].Aliases -contains 'ch') | Should Be $true
             ($command.Parameters['Last'].Aliases -contains 'la') | Should Be $true
             ($command.Parameters['SelectOnly'].Aliases -contains 'so') | Should Be $true
             ($command.Parameters['CopyUrl'].Aliases -contains 'cu') | Should Be $true
@@ -685,6 +687,38 @@ Describe 'Start-MPVStream behavior' {
             Remove-Item -LiteralPath $script:historyPath -ErrorAction SilentlyContinue
             Remove-Variable mpvArgs -Scope Script -ErrorAction SilentlyContinue
             Remove-Variable historyPath -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'filters and clears playback history' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            $script:historyPath = Join-Path $env:TEMP 'start-mpvstream-history-filter-test.json'
+            function Get-MPVStreamHistoryPath { $script:historyPath }
+
+            $config = Get-MPVStreamDefaultConfig
+            Add-MPVStreamHistoryItem -Url 'https://example.test/video' -Title 'Video' -Type 'Video'
+            Add-MPVStreamHistoryItem -Url 'https://example.test/playlist' -Title 'Playlist' -Type 'Playlist'
+
+            function Select-MPVStreamSearchResult {
+                param([object[]]$Items)
+                $script:historyItems = $Items
+                return $Items[0]
+            }
+
+            $selected = Select-MPVStreamHistoryItem -Config $config -Type Video
+            $selected.Url | Should Be 'https://example.test/video'
+            $script:historyItems.Count | Should Be 1
+
+            Clear-MPVStreamHistory
+            Test-Path -LiteralPath $script:historyPath -PathType Leaf | Should Be $false
+
+            Remove-Item Function:\Get-MPVStreamHistoryPath -ErrorAction SilentlyContinue
+            Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $script:historyPath -ErrorAction SilentlyContinue
+            Remove-Variable historyPath -Scope Script -ErrorAction SilentlyContinue
+            Remove-Variable historyItems -Scope Script -ErrorAction SilentlyContinue
         }
     }
 

@@ -28,6 +28,7 @@ function Write-MPVStreamHelp {
     Write-Host "    $("{0,-22}" -f "-MaxResults, -max <num>") Number of search results (1-50, default: 10)" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Clipboard, -cb") Play URL from clipboard" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-History, -hi") Pick from playback history" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-ClearHistory, -ch") Delete playback history" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Last, -la") Replay last history item" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-ReversePlaylist, -r") Reverse playlist order" -ForegroundColor $cDesc 
     Write-Host "`nConfiguration" -ForegroundColor White 
@@ -45,6 +46,8 @@ function Write-MPVStreamHelp {
     Write-Host "    play 'never gonna give you up' -s -First" -ForegroundColor $cDesc 
     Write-Host "    play -Clipboard" -ForegroundColor $cDesc 
     Write-Host "    play -History" -ForegroundColor $cDesc 
+    Write-Host "    play -History -Type Video" -ForegroundColor $cDesc 
+    Write-Host "    play -ClearHistory" -ForegroundColor $cDesc 
     Write-Host "    play -Last" -ForegroundColor $cDesc 
     Write-Host "    play 'live coding' -s -Type Playlist" -ForegroundColor $cDesc 
     Write-Host "    play 'lofi beats' -s -p -f audio" -ForegroundColor $cDesc 
