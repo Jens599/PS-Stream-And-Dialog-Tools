@@ -72,6 +72,18 @@ function Start-MPVStream {
         [switch]$DryRun,
 
         [Parameter()]
+        [Alias('so')]
+        [switch]$SelectOnly,
+
+        [Parameter()]
+        [Alias('cu')]
+        [switch]$CopyUrl,
+
+        [Parameter()]
+        [Alias('o')]
+        [switch]$Open,
+
+        [Parameter()]
         [Alias('cb')]
         [switch]$Clipboard,
 
@@ -175,8 +187,9 @@ function Start-MPVStream {
         }
 
         # --- 1. Dependency Checks ---
-        $player = Resolve-MPVStreamPlayer -PlayerPath $configData.playerPath
-        if (-not $isConfigOnly -and -not $player) {
+        $requiresPlayer = -not ($SelectOnly -or $CopyUrl -or $Open)
+        $player = if ($requiresPlayer) { Resolve-MPVStreamPlayer -PlayerPath $configData.playerPath } else { $null }
+        if (-not $isConfigOnly -and $requiresPlayer -and -not $player) {
             Write-Error "No media player found. Configure one with play -Config, or install mpv/mpv.net in PATH."
             return 
         }
@@ -243,6 +256,27 @@ function Start-MPVStream {
                 Write-Error "Search failed: $($_.Exception.Message)" 
                 return
             }
+        }
+
+        if ($SelectOnly) {
+            [pscustomobject]@{
+                Url   = $targetUrl
+                Title = $historyTitle
+                Type  = $historyType
+            }
+            return
+        }
+
+        if ($CopyUrl) {
+            Set-Clipboard -Value $targetUrl
+            Write-Host "→ Copied URL: $targetUrl" -ForegroundColor Green
+            return
+        }
+
+        if ($Open) {
+            Start-Process $targetUrl
+            Write-Host "→ Opened URL: $targetUrl" -ForegroundColor Green
+            return
         }
 
         # --- 4. Format Mapping ---
