@@ -134,6 +134,8 @@ Describe 'Start-MPVStream behavior' {
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Config' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'ConfigExport' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'ConfigImport' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'MpvArgument' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'DryRun' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'PassThru' | Should Be $true
@@ -163,6 +165,8 @@ Describe 'Start-MPVStream behavior' {
 
             $command = Get-Command Start-MPVStream -ErrorAction Stop
             ($command.Parameters['Config'].Aliases -contains 'cfg') | Should Be $true
+            ($command.Parameters['ConfigExport'].Aliases -contains 'cfgex') | Should Be $true
+            ($command.Parameters['ConfigImport'].Aliases -contains 'cfgim') | Should Be $true
             ($command.Parameters['First'].Aliases -contains 'fi') | Should Be $true
             ($command.Parameters['Type'].Aliases -contains 't') | Should Be $true
             ($command.Parameters['MpvArgument'].Aliases -contains 'ma') | Should Be $true
@@ -310,6 +314,49 @@ Describe 'Start-MPVStream behavior' {
             Test-MPVStreamOptionMenu -Items $items | Should Be $true
             Format-MPVStreamOptionLine -Item $items[0] -Index 1 | Should Be '01  Search UI Provider: fzf'
             Format-MPVStreamOptionLine -Item $items[1] -Index 2 | Should Be '02  Cookie Path: <not set>'
+        }
+    }
+
+    It 'exports and imports persistent config JSON' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            $script:configPath = Join-Path $env:TEMP 'start-mpvstream-imported-config.json'
+            $exportPath = Join-Path $env:TEMP 'start-mpvstream-export-config.json'
+            $importPath = Join-Path $env:TEMP 'start-mpvstream-import-config.json'
+
+            function Get-MPVStreamConfigPath { $script:configPath }
+            function Read-MPVStreamConfig {
+                $config = Get-MPVStreamDefaultConfig
+                $config.maxResults = 12
+                $config.menuProvider = 'BasicPrompt'
+                return $config
+            }
+
+            Start-MPVStream -ConfigExport $exportPath
+            $exported = Get-Content -LiteralPath $exportPath -Raw | ConvertFrom-Json
+            $exported.maxResults | Should Be 12
+            $exported.menuProvider | Should Be 'BasicPrompt'
+
+            [pscustomobject]@{
+                maxResults = 8
+                menuProvider = 'Out-ConsoleGridView'
+                ytdlFormat = 'audio'
+            } | ConvertTo-Json | Out-File -LiteralPath $importPath -Encoding UTF8
+
+            Start-MPVStream -ConfigImport $importPath
+            $imported = Get-Content -LiteralPath $script:configPath -Raw | ConvertFrom-Json
+            $imported.maxResults | Should Be 8
+            $imported.menuProvider | Should Be 'OutConsoleGridView'
+            $imported.ytdlFormat | Should Be 'audio'
+            $imported.size | Should Be 'PIP'
+
+            Remove-Item Function:\Get-MPVStreamConfigPath -ErrorAction SilentlyContinue
+            Remove-Item Function:\Read-MPVStreamConfig -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $script:configPath -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $exportPath -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $importPath -ErrorAction SilentlyContinue
+            Remove-Variable configPath -Scope Script -ErrorAction SilentlyContinue
         }
     }
 

@@ -48,6 +48,14 @@ function Start-MPVStream {
         [Alias('cfg')]
         [switch]$Config,
 
+        [Parameter()]
+        [Alias('cfgex')]
+        [string]$ConfigExport,
+
+        [Parameter()]
+        [Alias('cfgim')]
+        [string]$ConfigImport,
+
         [Alias('s')]
         [switch]$Search,
 
@@ -130,6 +138,16 @@ function Start-MPVStream {
 
     process {
         $configData = Read-MPVStreamConfig
+
+        if ($ConfigExport) {
+            Export-MPVStreamConfig -Config $configData -Path $ConfigExport
+            return
+        }
+
+        if ($ConfigImport) {
+            Import-MPVStreamConfig -Path $ConfigImport
+            return
+        }
 
         if ($Config) {
             Invoke-MPVStreamConfig -Config $configData
