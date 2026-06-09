@@ -104,6 +104,10 @@ function Start-MPVStream {
         [switch]$History,
 
         [Parameter()]
+        [Alias('ch')]
+        [switch]$ClearHistory,
+
+        [Parameter()]
         [Alias('la')]
         [switch]$Last,
 
@@ -154,6 +158,11 @@ function Start-MPVStream {
             return
         }
 
+        if ($ClearHistory) {
+            Clear-MPVStreamHistory
+            return
+        }
+
         if (-not $PSBoundParameters.ContainsKey('Size') -and $configData.size) { $Size = $configData.size }
         if (-not $PSBoundParameters.ContainsKey('YtdlFormat') -and $configData.ytdlFormat) { $YtdlFormat = $configData.ytdlFormat }
         if (-not $PSBoundParameters.ContainsKey('MaxResults') -and $configData.maxResults) { $MaxResults = $configData.maxResults }
@@ -185,7 +194,7 @@ function Start-MPVStream {
         }
 
         if ($History) {
-            $historyItem = Select-MPVStreamHistoryItem -Config $configData
+            $historyItem = Select-MPVStreamHistoryItem -Config $configData -Type $Type
             if ($null -eq $historyItem) { return }
 
             $Url = $historyItem.Url

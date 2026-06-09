@@ -58,10 +58,28 @@ function Get-MPVStreamLastHistoryItem {
     return $history[0]
 }
 
+function Clear-MPVStreamHistory {
+    $historyPath = Get-MPVStreamHistoryPath
+    if (Test-Path -LiteralPath $historyPath -PathType Leaf) {
+        Remove-Item -LiteralPath $historyPath -Force
+    }
+
+    Write-Host "Cleared playback history: $historyPath" -ForegroundColor Green
+}
+
 function Select-MPVStreamHistoryItem {
-    param([Parameter(Mandatory = $true)][pscustomobject]$Config)
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Config,
+
+        [string]$Type
+    )
 
     $history = @(Read-MPVStreamHistory)
+    if ($Type) {
+        $history = @($history | Where-Object { $_.Type -eq $Type })
+    }
+
     if ($history.Count -eq 0) { return $null }
 
     $items = for ($i = 0; $i -lt $history.Count; $i++) {
