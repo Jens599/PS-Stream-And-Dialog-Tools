@@ -136,6 +136,7 @@ Describe 'Start-MPVStream behavior' {
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Config' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'MpvArgument' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'DryRun' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'PassThru' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'SubtitleLanguage' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Clipboard' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'History' | Should Be $true
@@ -166,6 +167,7 @@ Describe 'Start-MPVStream behavior' {
             ($command.Parameters['Type'].Aliases -contains 't') | Should Be $true
             ($command.Parameters['MpvArgument'].Aliases -contains 'ma') | Should Be $true
             ($command.Parameters['DryRun'].Aliases -contains 'dr') | Should Be $true
+            ($command.Parameters['PassThru'].Aliases -contains 'pt') | Should Be $true
             ($command.Parameters['Clipboard'].Aliases -contains 'cb') | Should Be $true
             ($command.Parameters['History'].Aliases -contains 'hi') | Should Be $true
             ($command.Parameters['Last'].Aliases -contains 'la') | Should Be $true
@@ -654,6 +656,28 @@ Describe 'Start-MPVStream behavior' {
             function Add-MPVStreamHistoryItem { throw 'History should not be written during dry run.' }
 
             Start-MPVStream 'https://example.test/video' -DryRun -MpvArgument '--speed=1.25'
+
+            Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'returns structured launch data during pass-through dry run' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig { Get-MPVStreamDefaultConfig }
+            function mpv { throw 'mpv should not be started during pass-through dry run.' }
+            function Add-MPVStreamHistoryItem { throw 'History should not be written during pass-through dry run.' }
+
+            $launch = Start-MPVStream 'https://example.test/video' -DryRun -PassThru -Size Small -YtdlFormat audio
+
+            $launch.Player | Should Be 'Start-MPVStream'
+            $launch.Url | Should Be 'https://example.test/video'
+            $launch.Title | Should Be 'https://example.test/video'
+            $launch.Type | Should Be 'Direct'
+            ($launch.Arguments -contains '--ytdl-format=bestaudio/best') | Should Be $true
+            $launch.Command | Should Match 'https://example\.test/video'
 
             Remove-Item Function:\mpv -ErrorAction SilentlyContinue
             Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue

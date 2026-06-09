@@ -14,6 +14,7 @@ function Write-MPVStreamHelp {
     Write-Host "    $("{0,-22}" -f "-HardwareAccel, -h") Enable hardware acceleration" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-MpvArgument <arg>") Extra mpv argument(s) appended to launch" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-DryRun") Show final command without starting mpv" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-PassThru, -pt") Return structured dry-run launch data" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-SelectOnly, -so") Return selected item without playing" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-CopyUrl, -cu") Copy selected URL without playing" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Open, -o") Open selected URL in browser instead of mpv" -ForegroundColor $cDesc 
@@ -36,15 +37,18 @@ function Write-MPVStreamHelp {
     Write-Host "`nExamples" -ForegroundColor White 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s" -ForegroundColor $cDesc 
+    Write-Host "    play 'never gonna give you up' -s -MaxResults 20" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s -CopyUrl" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s -Open" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s -First" -ForegroundColor $cDesc 
     Write-Host "    play -Clipboard" -ForegroundColor $cDesc 
+    Write-Host "    play -History" -ForegroundColor $cDesc 
     Write-Host "    play -Last" -ForegroundColor $cDesc 
-    Write-Host "    play 'live coding' -s -Type Video" -ForegroundColor $cDesc 
+    Write-Host "    play 'live coding' -s -Type Playlist" -ForegroundColor $cDesc 
     Write-Host "    play 'lofi beats' -s -p -f audio" -ForegroundColor $cDesc 
     Write-Host "    play 'https://youtu.be/dQw4w9WgXcQ' -SubtitleLanguage en,ja" -ForegroundColor $cDesc 
     Write-Host "    play 'https://youtu.be/dQw4w9WgXcQ' -MpvArgument '--speed=1.25' -DryRun" -ForegroundColor $cDesc 
+    Write-Host "    play 'https://youtu.be/dQw4w9WgXcQ' -DryRun -PassThru" -ForegroundColor $cDesc 
     Write-Host "    play 'https://youtu.be/dQw4w9WgXcQ' -sz Small -f 720p" -ForegroundColor $cDesc 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' -c cookies.txt" -ForegroundColor $cDesc 
     Write-Host "    play -c .\Downloads\Compressed\cookies.txt" -ForegroundColor $cDesc 
