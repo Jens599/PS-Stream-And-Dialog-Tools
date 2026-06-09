@@ -425,6 +425,71 @@ Describe 'Start-MPVStream behavior' {
         }
     }
 
+    It 'stops offering more search results when expansion does not add results' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Search-MPVStreamYouTube {
+                param([int]$MaxResults)
+                $script:requestedMaxResults += $MaxResults
+                return @(
+                    [pscustomobject]@{ Title = 'First'; Type = 'Video'; Url = 'https://example.test/first'; MenuTitle = '[Video] First' },
+                    [pscustomobject]@{ Title = 'Second'; Type = 'Video'; Url = 'https://example.test/second'; MenuTitle = '[Video] Second' }
+                )
+            }
+
+            function Select-MPVStreamSearchResult {
+                param([object[]]$Items)
+                $script:menuCounts += $Items.Count
+                if ($script:menuCounts.Count -eq 1) { return $Items[-1] }
+                return $Items[0]
+            }
+
+            $script:requestedMaxResults = @()
+            $script:menuCounts = @()
+
+            $selected = Select-MPVStreamYouTubeSearchResult -EncodedQuery 'query' -MaxResults 2 -Type Video -Config (Get-MPVStreamDefaultConfig) -Title 'Search Results: query' -EmptyMessage 'No results found.'
+
+            $script:requestedMaxResults[0] | Should Be 2
+            $script:requestedMaxResults[1] | Should Be 4
+            $script:menuCounts[0] | Should Be 3
+            $script:menuCounts[1] | Should Be 2
+            $selected.Url | Should Be 'https://example.test/first'
+
+            Remove-Item Function:\Search-MPVStreamYouTube -ErrorAction SilentlyContinue
+            Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
+            Remove-Variable requestedMaxResults -Scope Script -ErrorAction SilentlyContinue
+            Remove-Variable menuCounts -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'caps load more search requests at fifty results' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Search-MPVStreamYouTube {
+                param([int]$MaxResults)
+                for ($i = 1; $i -le $MaxResults; $i++) {
+                    [pscustomobject]@{ Title = "Result $i"; Type = 'Video'; Url = "https://example.test/$i"; MenuTitle = "[Video] Result $i" }
+                }
+            }
+
+            function Select-MPVStreamSearchResult {
+                param([object[]]$Items)
+                $script:loadMoreTitle = $Items[-1].Title
+                return $null
+            }
+
+            Select-MPVStreamYouTubeSearchResult -EncodedQuery 'query' -MaxResults 40 -Config (Get-MPVStreamDefaultConfig) -Title 'Search Results: query' -EmptyMessage 'No results found.' | Out-Null
+
+            $script:loadMoreTitle | Should Be 'Load more results (40 -> 50)'
+
+            Remove-Item Function:\Search-MPVStreamYouTube -ErrorAction SilentlyContinue
+            Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
+            Remove-Variable loadMoreTitle -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
     It 'filters search results by type' {
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 

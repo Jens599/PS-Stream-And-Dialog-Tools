@@ -108,6 +108,7 @@ function Select-MPVStreamYouTubeSearchResult {
 
     $currentMaxResults = $MaxResults
     $maxSearchResults = 50
+    $previousResultCount = $null
 
     while ($true) {
         $searchParameters = @{
@@ -131,7 +132,11 @@ function Select-MPVStreamYouTubeSearchResult {
         }
 
         $selectableResults = @($searchResults)
-        if ($currentMaxResults -lt $maxSearchResults) {
+        $hasMoreResults = $currentMaxResults -lt $maxSearchResults
+        if ($null -ne $previousResultCount -and $searchResults.Count -le $previousResultCount) { $hasMoreResults = $false }
+        if (-not $Type -and $searchResults.Count -lt $currentMaxResults) { $hasMoreResults = $false }
+
+        if ($hasMoreResults) {
             $nextMaxResults = [Math]::Min($currentMaxResults + $MaxResults, $maxSearchResults)
             $selectableResults += [pscustomobject]@{
                 Title      = "Load more results ($currentMaxResults -> $nextMaxResults)"
@@ -150,6 +155,7 @@ function Select-MPVStreamYouTubeSearchResult {
         if ($null -eq $selectedResult) { return $null }
 
         if ($selectedResult.IsLoadMore) {
+            $previousResultCount = $searchResults.Count
             $currentMaxResults = [Math]::Min($currentMaxResults + $MaxResults, $maxSearchResults)
             continue
         }
