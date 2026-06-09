@@ -72,6 +72,10 @@ function Start-MPVStream {
         [switch]$DryRun,
 
         [Parameter()]
+        [Alias('pt')]
+        [switch]$PassThru,
+
+        [Parameter()]
         [Alias('so')]
         [switch]$SelectOnly,
 
@@ -290,6 +294,16 @@ function Start-MPVStream {
 
         if ($DryRun) {
             Write-Host "→ Dry run: MPV was not started" -ForegroundColor Cyan
+            if ($PassThru) {
+                [pscustomobject]@{
+                    Player    = $player.DisplayName
+                    Arguments = $mpvArgs
+                    Url       = $targetUrl
+                    Title     = $historyTitle
+                    Type      = $historyType
+                    Command   = "$($player.DisplayName) $($mpvArgs -join ' ') $targetUrl"
+                }
+            }
             return
         }
 
