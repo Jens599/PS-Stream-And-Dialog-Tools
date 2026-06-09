@@ -134,6 +134,7 @@ Describe 'Start-MPVStream behavior' {
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Config' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Doctor' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'ConfigExport' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'ConfigImport' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'MpvArgument' | Should Be $true
@@ -166,6 +167,7 @@ Describe 'Start-MPVStream behavior' {
 
             $command = Get-Command Start-MPVStream -ErrorAction Stop
             ($command.Parameters['Config'].Aliases -contains 'cfg') | Should Be $true
+            ($command.Parameters['Doctor'].Aliases -contains 'doc') | Should Be $true
             ($command.Parameters['ConfigExport'].Aliases -contains 'cfgex') | Should Be $true
             ($command.Parameters['ConfigImport'].Aliases -contains 'cfgim') | Should Be $true
             ($command.Parameters['First'].Aliases -contains 'fi') | Should Be $true
@@ -359,6 +361,39 @@ Describe 'Start-MPVStream behavior' {
             Remove-Item -LiteralPath $exportPath -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $importPath -ErrorAction SilentlyContinue
             Remove-Variable configPath -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'returns doctor diagnostics for dependencies and app paths' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig { Get-MPVStreamDefaultConfig }
+            function Resolve-MPVStreamCookiePath { 'C:\Temp\cookies.txt' }
+            function Get-MPVStreamConfigPath { 'C:\Temp\config.json' }
+            function Get-MPVStreamHistoryPath { 'C:\Temp\history.json' }
+            function Get-Command {
+                param([string]$Name)
+                if ($Name -in @('mpv', 'yt-dlp', 'fzf')) {
+                    return [pscustomobject]@{ Name = $Name; Source = $Name; CommandType = 'Application' }
+                }
+                return $null
+            }
+
+            $results = @(Start-MPVStream -Doctor)
+
+            ($results | Where-Object Name -eq 'Player').Status | Should Be 'OK'
+            ($results | Where-Object Name -eq 'yt-dlp').Status | Should Be 'OK'
+            ($results | Where-Object Name -eq 'fzf').Status | Should Be 'OK'
+            ($results | Where-Object Name -eq 'Out-ConsoleGridView').Status | Should Be 'Missing'
+            ($results | Where-Object Name -eq 'Cookies').Detail | Should Be 'C:\Temp\cookies.txt'
+            ($results | Where-Object Name -eq 'Config Path').Detail | Should Be 'C:\Temp\config.json'
+            ($results | Where-Object Name -eq 'History Path').Detail | Should Be 'C:\Temp\history.json'
+
+            Remove-Item Function:\Resolve-MPVStreamCookiePath -ErrorAction SilentlyContinue
+            Remove-Item Function:\Get-MPVStreamConfigPath -ErrorAction SilentlyContinue
+            Remove-Item Function:\Get-MPVStreamHistoryPath -ErrorAction SilentlyContinue
+            Remove-Item Function:\Get-Command -ErrorAction SilentlyContinue
         }
     }
 
