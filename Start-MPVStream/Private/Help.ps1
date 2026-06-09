@@ -34,6 +34,8 @@ function Write-MPVStreamHelp {
     Write-Host "    $("{0,-22}" -f "-CookiePath, -c <path>") Path to cookie file (saved persistently)" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "Player Path") Set in -Config; supports mpv, mpvnet.com, or full path" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Config, -cfg") Interactive persistent configuration" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-ConfigExport <path>") Export persistent config JSON" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-ConfigImport <path>") Import persistent config JSON" -ForegroundColor $cDesc 
     Write-Host "`nExamples" -ForegroundColor White 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s" -ForegroundColor $cDesc 
@@ -53,4 +55,6 @@ function Write-MPVStreamHelp {
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' -c cookies.txt" -ForegroundColor $cDesc 
     Write-Host "    play -c .\Downloads\Compressed\cookies.txt" -ForegroundColor $cDesc 
     Write-Host "    play --config" -ForegroundColor $cDesc 
+    Write-Host "    play -ConfigExport .\start-mpvstream.config.json" -ForegroundColor $cDesc 
+    Write-Host "    play -ConfigImport .\start-mpvstream.config.json" -ForegroundColor $cDesc 
 }

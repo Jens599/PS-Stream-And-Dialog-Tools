@@ -58,6 +58,53 @@ function Save-MPVStreamConfig {
     $Config | ConvertTo-Json | Out-File -LiteralPath $configPath -Encoding UTF8
 }
 
+function Export-MPVStreamConfig {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Config,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $resolvedPath = $Path
+    if (-not [System.IO.Path]::IsPathRooted($resolvedPath)) {
+        $resolvedPath = Join-Path (Get-Location) $resolvedPath
+    }
+
+    $directory = Split-Path -Parent $resolvedPath
+    if ($directory -and -not (Test-Path -LiteralPath $directory -PathType Container)) {
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    }
+
+    $Config | ConvertTo-Json | Out-File -LiteralPath $resolvedPath -Encoding UTF8
+    Write-Host "Exported config: $resolvedPath" -ForegroundColor Green
+}
+
+function Import-MPVStreamConfig {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        Write-Error "Config import file not found: $Path"
+        return
+    }
+
+    $imported = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    $config = Get-MPVStreamDefaultConfig
+    foreach ($property in $config.PSObject.Properties.Name) {
+        if ($imported.PSObject.Properties.Name -contains $property) {
+            $config.$property = $imported.$property
+        }
+    }
+    $config.menuProvider = Normalize-MPVStreamMenuProvider $config.menuProvider
+
+    Save-MPVStreamConfig -Config $config
+    Write-Host "Imported config: $(Get-MPVStreamConfigPath)" -ForegroundColor Green
+}
+
 function Invoke-MPVStreamConfig {
     param(
         [Parameter(Mandatory = $true)]
