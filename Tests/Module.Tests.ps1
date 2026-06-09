@@ -125,7 +125,8 @@ Describe 'Start-MPVStream behavior' {
         $source = Get-Content -LiteralPath (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psm1') -Raw
 
         $source | Should Match '\$isConfigOnly = \[string\]::IsNullOrWhiteSpace\(\$Url\) -and \$CookiePath'
-        $source | Should Match '\$player = Resolve-MPVStreamPlayer -PlayerPath \$configData\.playerPath'
+        $source | Should Match '\$requiresPlayer = -not \(\$SelectOnly -or \$CopyUrl -or \$Open\)'
+        $source | Should Match '\$player = if \(\$requiresPlayer\) \{ Resolve-MPVStreamPlayer -PlayerPath \$configData\.playerPath \} else \{ \$null \}'
         $source | Should Match 'if \(\$Search -and -not \(Get-Command yt-dlp'
     }
 
@@ -139,6 +140,9 @@ Describe 'Start-MPVStream behavior' {
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Clipboard' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'History' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Last' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'SelectOnly' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'CopyUrl' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Open' | Should Be $true
 
         InModuleScope Start-MPVStream {
             $config = Get-MPVStreamDefaultConfig
@@ -165,6 +169,9 @@ Describe 'Start-MPVStream behavior' {
             ($command.Parameters['Clipboard'].Aliases -contains 'cb') | Should Be $true
             ($command.Parameters['History'].Aliases -contains 'hi') | Should Be $true
             ($command.Parameters['Last'].Aliases -contains 'la') | Should Be $true
+            ($command.Parameters['SelectOnly'].Aliases -contains 'so') | Should Be $true
+            ($command.Parameters['CopyUrl'].Aliases -contains 'cu') | Should Be $true
+            ($command.Parameters['Open'].Aliases -contains 'o') | Should Be $true
             ($command.Parameters['NoSubtitles'].Aliases -contains 'ns') | Should Be $true
             ($command.Parameters['SubtitleLanguage'].Aliases -contains 'sl') | Should Be $true
         }
@@ -650,6 +657,71 @@ Describe 'Start-MPVStream behavior' {
 
             Remove-Item Function:\mpv -ErrorAction SilentlyContinue
             Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'returns the selected search result without requiring a player' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig { Get-MPVStreamDefaultConfig }
+            function Resolve-MPVStreamPlayer { throw 'Player should not be resolved for -SelectOnly.' }
+            function yt-dlp {
+                "Selected Result`tselected123`tYoutube`thttps://www.youtube.com/watch?v=selected123`t1:00`tChannel`t100"
+            }
+            function Select-MPVStreamSearchResult { param([object[]]$Items) $Items[0] }
+            function Add-MPVStreamHistoryItem { throw 'History should not be written for -SelectOnly.' }
+
+            $selected = Start-MPVStream 'selected result' -Search -SelectOnly
+
+            $selected.Url | Should Be 'https://www.youtube.com/watch?v=selected123'
+            $selected.Title | Should Be 'Selected Result'
+            $selected.Type | Should Be 'Video'
+
+            Remove-Item Function:\Resolve-MPVStreamPlayer -ErrorAction SilentlyContinue
+            Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
+            Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'copies a resolved URL without starting mpv' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig { Get-MPVStreamDefaultConfig }
+            function Resolve-MPVStreamPlayer { throw 'Player should not be resolved for -CopyUrl.' }
+            function Set-Clipboard { param([string]$Value) $script:clipboardValue = $Value }
+            function Add-MPVStreamHistoryItem { throw 'History should not be written for -CopyUrl.' }
+
+            Start-MPVStream 'https://example.test/copy' -CopyUrl
+
+            $script:clipboardValue | Should Be 'https://example.test/copy'
+
+            Remove-Item Function:\Resolve-MPVStreamPlayer -ErrorAction SilentlyContinue
+            Remove-Item Function:\Set-Clipboard -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
+            Remove-Variable clipboardValue -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'opens a resolved URL without starting mpv' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig { Get-MPVStreamDefaultConfig }
+            function Resolve-MPVStreamPlayer { throw 'Player should not be resolved for -Open.' }
+            function Start-Process { param([string]$FilePath) $script:openedUrl = $FilePath }
+            function Add-MPVStreamHistoryItem { throw 'History should not be written for -Open.' }
+
+            Start-MPVStream 'https://example.test/open' -Open
+
+            $script:openedUrl | Should Be 'https://example.test/open'
+
+            Remove-Item Function:\Resolve-MPVStreamPlayer -ErrorAction SilentlyContinue
+            Remove-Item Function:\Start-Process -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
+            Remove-Variable openedUrl -Scope Script -ErrorAction SilentlyContinue
         }
     }
 

@@ -14,6 +14,9 @@ function Write-MPVStreamHelp {
     Write-Host "    $("{0,-22}" -f "-HardwareAccel, -h") Enable hardware acceleration" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-MpvArgument <arg>") Extra mpv argument(s) appended to launch" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-DryRun") Show final command without starting mpv" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-SelectOnly, -so") Return selected item without playing" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-CopyUrl, -cu") Copy selected URL without playing" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-Open, -o") Open selected URL in browser instead of mpv" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-SubtitleLanguage") Preferred subtitle language(s), e.g. en,ja" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-NoSubtitles, -nosub") Disable subtitle language preference" -ForegroundColor $cDesc 
     Write-Host "`nSearch Features" -ForegroundColor White 
@@ -33,6 +36,8 @@ function Write-MPVStreamHelp {
     Write-Host "`nExamples" -ForegroundColor White 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s" -ForegroundColor $cDesc 
+    Write-Host "    play 'never gonna give you up' -s -CopyUrl" -ForegroundColor $cDesc 
+    Write-Host "    play 'never gonna give you up' -s -Open" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s -First" -ForegroundColor $cDesc 
     Write-Host "    play -Clipboard" -ForegroundColor $cDesc 
     Write-Host "    play -Last" -ForegroundColor $cDesc 
