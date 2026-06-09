@@ -80,6 +80,84 @@ function Search-MPVStreamYouTube {
     return @($results)
 }
 
+function Select-MPVStreamYouTubeSearchResult {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$EncodedQuery,
+
+        [switch]$Playlist,
+
+        [Parameter(Mandatory = $true)]
+        [int]$MaxResults,
+
+        [string]$CookiePath,
+
+        [string]$Type,
+
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Config,
+
+        [switch]$First,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Title,
+
+        [Parameter(Mandatory = $true)]
+        [string]$EmptyMessage
+    )
+
+    $currentMaxResults = $MaxResults
+    $maxSearchResults = 50
+
+    while ($true) {
+        $searchParameters = @{
+            EncodedQuery = $EncodedQuery
+            Playlist     = $Playlist
+            MaxResults   = $currentMaxResults
+            CookiePath   = $CookiePath
+        }
+        if ($Type) { $searchParameters.Type = $Type }
+
+        $searchResults = @(Search-MPVStreamYouTube @searchParameters)
+        if ($searchResults.Count -eq 0) {
+            Write-Host $EmptyMessage -ForegroundColor Red
+            return $null
+        }
+
+        Write-Host "Search results found: $($searchResults.Count)" -ForegroundColor Yellow
+
+        if ($First) {
+            return $searchResults[0]
+        }
+
+        $selectableResults = @($searchResults)
+        if ($currentMaxResults -lt $maxSearchResults) {
+            $nextMaxResults = [Math]::Min($currentMaxResults + $MaxResults, $maxSearchResults)
+            $selectableResults += [pscustomobject]@{
+                Title      = "Load more results ($currentMaxResults -> $nextMaxResults)"
+                ID         = $null
+                Type       = 'Option'
+                Url        = $null
+                Duration   = $null
+                Uploader   = $null
+                ViewCount  = $null
+                MenuTitle  = "Load more results ($currentMaxResults -> $nextMaxResults)"
+                IsLoadMore = $true
+            }
+        }
+
+        $selectedResult = Select-MPVStreamSearchResult -Items $selectableResults -Title $Title -Config $Config
+        if ($null -eq $selectedResult) { return $null }
+
+        if ($selectedResult.IsLoadMore) {
+            $currentMaxResults = [Math]::Min($currentMaxResults + $MaxResults, $maxSearchResults)
+            continue
+        }
+
+        return $selectedResult
+    }
+}
+
 function ConvertFrom-MPVStreamSearchRow {
     param([string]$Row)
 
