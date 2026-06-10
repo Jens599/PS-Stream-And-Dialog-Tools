@@ -64,6 +64,10 @@ function Start-MPVStream {
         [Alias('s')]
         [switch]$Search,
 
+        [Parameter()]
+        [Alias('Homepage')]
+        [switch]$Home,
+
         [Alias('p')]
         [switch]$Playlist,
 
@@ -215,12 +219,14 @@ function Start-MPVStream {
         }
 
         # --- 0. Help Check / Config Mode ---
-        $isConfigOnly = [string]::IsNullOrWhiteSpace($Url) -and $CookiePath
+        $isConfigOnly = [string]::IsNullOrWhiteSpace($Url) -and $CookiePath -and -not $Home
         if ([string]::IsNullOrWhiteSpace($Url)) {
             # If only cookie path is provided, enter config mode
-            if ($CookiePath) {
+            if ($CookiePath -and -not $Home) {
                 Write-Host "→ Configuration mode: Testing cookie path" -ForegroundColor Cyan
                 # Cookie configuration logic will run below
+            } elseif ($Home) {
+                $Url = 'YouTube Home'
             } else {
                 Write-MPVStreamHelp
                 return
@@ -235,9 +241,9 @@ function Start-MPVStream {
             return 
         }
         
-        # Only check yt-dlp dependency if searching.
-        if ($Search -and -not (Get-Command yt-dlp -ErrorAction SilentlyContinue)) {
-            Write-Error "yt-dlp is missing from PATH. Please install yt-dlp for search/configuration functionality." 
+        # Only check yt-dlp dependency if fetching YouTube listings.
+        if (($Search -or $Home) -and -not (Get-Command yt-dlp -ErrorAction SilentlyContinue)) {
+            Write-Error "yt-dlp is missing from PATH. Please install yt-dlp for search/homepage functionality."
             return 
         }
         
@@ -255,7 +261,7 @@ function Start-MPVStream {
         }
 
         # --- 2. URL Validation ---
-        if (-not $Search) {
+        if (-not $Search -and -not $Home) {
             $parsedUri = $null
             if (-not [uri]::TryCreate($Url, [System.UriKind]::Absolute, [ref]$parsedUri) -or $parsedUri.Scheme -notin @('http', 'https')) {
                 Write-Error "Invalid URL format. URLs should start with http:// or https://"
@@ -264,17 +270,29 @@ function Start-MPVStream {
             $targetUrl = $Url
             $historyTitle = if ($replayTitle) { $replayTitle } else { $Url }
             $historyType = if ($replayType) { $replayType } else { 'Direct' }
+        } elseif ($Home) {
+            $targetUrl = 'https://www.youtube.com/'
+            $historyTitle = 'YouTube Home'
+            $historyType = 'Home'
         } else {
             $targetUrl = $Url
             $historyTitle = $Url
             $historyType = 'Search'
         }
         # --- 3. Search Logic ---
-        if ($Search) {
+        if ($Search -or $Home) {
             try {
-                $encodedQuery = [uri]::EscapeDataString($Url) 
+                $encodedQuery = if ($Home) { $null } else { [uri]::EscapeDataString($Url) }
                 
-                if ($Playlist) {
+                if ($Home) {
+                    $selectedResult = Select-MPVStreamYouTubeSearchResult -Home -MaxResults $MaxResults -CookiePath $finalCookiePath -Type $Type -Config $configData -First:$First -Title 'YouTube Home' -EmptyMessage 'No homepage videos found.'
+                    if ($null -eq $selectedResult) { return }
+
+                    $targetUrl = $selectedResult.Url
+                    $historyTitle = $selectedResult.Title
+                    $historyType = $selectedResult.Type
+                    Write-Host "Match [$($selectedResult.Type)]: $($selectedResult.Title)" -ForegroundColor Cyan
+                } elseif ($Playlist) {
                     # Search for Playlists specifically using the 'sp' parameter.
                     $selectedResult = Select-MPVStreamYouTubeSearchResult -EncodedQuery $encodedQuery -Playlist:$Playlist -MaxResults $MaxResults -CookiePath $finalCookiePath -Type $Type -Config $configData -First:$First -Title "Playlist Results: $Url" -EmptyMessage 'No playlists found for that search.'
                     if ($null -eq $selectedResult) { return }

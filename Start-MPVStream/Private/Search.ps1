@@ -18,8 +18,9 @@ function Get-MPVStreamSearchType {
 
 function New-MPVStreamYtdlpSearchArgument {
     param(
-        [Parameter(Mandatory = $true)]
         [string]$EncodedQuery,
+
+        [switch]$Home,
 
         [switch]$Playlist,
 
@@ -29,8 +30,8 @@ function New-MPVStreamYtdlpSearchArgument {
         [string]$CookiePath
     )
 
-    $searchUrl = "https://www.youtube.com/results?search_query=$EncodedQuery"
-    if ($Playlist) {
+    $searchUrl = if ($Home) { 'https://www.youtube.com/' } else { "https://www.youtube.com/results?search_query=$EncodedQuery" }
+    if (-not $Home -and $Playlist) {
         $searchUrl = "$searchUrl&sp=EgIQAw%3D%3D"
     }
 
@@ -52,8 +53,9 @@ function New-MPVStreamYtdlpSearchArgument {
 
 function Search-MPVStreamYouTube {
     param(
-        [Parameter(Mandatory = $true)]
         [string]$EncodedQuery,
+
+        [switch]$Home,
 
         [switch]$Playlist,
 
@@ -66,7 +68,7 @@ function Search-MPVStreamYouTube {
         [string]$Type
     )
 
-    $ytdlArgs = New-MPVStreamYtdlpSearchArgument -EncodedQuery $EncodedQuery -Playlist:$Playlist -MaxResults $MaxResults -CookiePath $CookiePath
+    $ytdlArgs = New-MPVStreamYtdlpSearchArgument -EncodedQuery $EncodedQuery -Home:$Home -Playlist:$Playlist -MaxResults $MaxResults -CookiePath $CookiePath
     $searchRows = @(yt-dlp @ytdlArgs)
     if ($LASTEXITCODE -is [int] -and $LASTEXITCODE -ne 0) { throw "yt-dlp exited with code $LASTEXITCODE" }
 
@@ -82,8 +84,9 @@ function Search-MPVStreamYouTube {
 
 function Select-MPVStreamYouTubeSearchResult {
     param(
-        [Parameter(Mandatory = $true)]
         [string]$EncodedQuery,
+
+        [switch]$Home,
 
         [switch]$Playlist,
 
@@ -113,6 +116,7 @@ function Select-MPVStreamYouTubeSearchResult {
     while ($true) {
         $searchParameters = @{
             EncodedQuery = $EncodedQuery
+            Home         = $Home
             Playlist     = $Playlist
             MaxResults   = $currentMaxResults
             CookiePath   = $CookiePath
