@@ -4,6 +4,7 @@ function Write-MPVStreamHelp {
     
     Write-Host "`nusage: play <url> [options]" -ForegroundColor $cHead 
     Write-Host "   or: play <query> -s [options]" -ForegroundColor $cHead 
+    Write-Host "   or: play -Home [options]" -ForegroundColor $cHead
     Write-Host "   or: play -c <cookie-path> [config mode]" -ForegroundColor $cHead 
     Write-Host "`nPlayback Control" -ForegroundColor White 
     Write-Host "    $("{0,-22}" -f "-Size, -sz <mode>") Window (PIP, Small, Medium, Max)" -ForegroundColor $cDesc 
@@ -22,6 +23,7 @@ function Write-MPVStreamHelp {
     Write-Host "    $("{0,-22}" -f "-NoSubtitles, -nosub") Disable subtitle language preference" -ForegroundColor $cDesc 
     Write-Host "`nSearch Features" -ForegroundColor White 
     Write-Host "    $("{0,-22}" -f "-Search, -s") Search YouTube instead of direct URL" -ForegroundColor $cDesc 
+    Write-Host "    $("{0,-22}" -f "-Home") Pick from YouTube homepage recommendations" -ForegroundColor $cDesc
     Write-Host "    $("{0,-22}" -f "-Playlist, -p") Search for playlists only" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-First, -fi") Play first search result without picker" -ForegroundColor $cDesc 
     Write-Host "    $("{0,-22}" -f "-Type, -t <type>") Filter mixed results (Video, Playlist, Channel)" -ForegroundColor $cDesc 
@@ -41,6 +43,9 @@ function Write-MPVStreamHelp {
     Write-Host "`nExamples" -ForegroundColor White 
     Write-Host "    play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s" -ForegroundColor $cDesc 
+    Write-Host "    play -Home" -ForegroundColor $cDesc
+    Write-Host "    play -Home -CopyUrl" -ForegroundColor $cDesc
+    Write-Host "    play -Home -First" -ForegroundColor $cDesc
     Write-Host "    play 'never gonna give you up' -s -MaxResults 20" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s -CopyUrl" -ForegroundColor $cDesc 
     Write-Host "    play 'never gonna give you up' -s -Open" -ForegroundColor $cDesc 

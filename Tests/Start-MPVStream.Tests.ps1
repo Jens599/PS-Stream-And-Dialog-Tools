@@ -60,7 +60,7 @@ Describe 'Start-MPVStream behavior' {
         $source | Should Match '\$isConfigOnly = \[string\]::IsNullOrWhiteSpace\(\$Url\) -and \$CookiePath'
         $source | Should Match '\$requiresPlayer = -not \(\$SelectOnly -or \$CopyUrl -or \$Open\)'
         $source | Should Match '\$player = if \(\$requiresPlayer\) \{ Resolve-MPVStreamPlayer -PlayerPath \$configData\.playerPath \} else \{ \$null \}'
-        $source | Should Match 'if \(\$Search -and -not \(Get-Command yt-dlp'
+        $source | Should Match 'if \(\(\$Search -or \$Home\) -and -not \(Get-Command yt-dlp'
     }
 
     It 'exposes modular persistent config settings' {
@@ -70,6 +70,7 @@ Describe 'Start-MPVStream behavior' {
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Doctor' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'ConfigExport' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'ConfigImport' | Should Be $true
+        (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'Home' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'MpvArgument' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'DryRun' | Should Be $true
         (Get-Command Start-MPVStream -ErrorAction Stop).Parameters.Keys -contains 'PassThru' | Should Be $true
@@ -103,6 +104,7 @@ Describe 'Start-MPVStream behavior' {
             ($command.Parameters['Doctor'].Aliases -contains 'doc') | Should Be $true
             ($command.Parameters['ConfigExport'].Aliases -contains 'cfgex') | Should Be $true
             ($command.Parameters['ConfigImport'].Aliases -contains 'cfgim') | Should Be $true
+            ($command.Parameters['Home'].Aliases -contains 'Homepage') | Should Be $true
             ($command.Parameters['First'].Aliases -contains 'fi') | Should Be $true
             ($command.Parameters['Type'].Aliases -contains 't') | Should Be $true
             ($command.Parameters['MpvArgument'].Aliases -contains 'ma') | Should Be $true
@@ -347,6 +349,23 @@ Describe 'Start-MPVStream behavior' {
         }
     }
 
+    It 'builds yt-dlp homepage arguments with metadata fields and cookies' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            $args = New-MPVStreamYtdlpSearchArgument -Home -Playlist -MaxResults 5 -CookiePath 'C:\Temp\cookies.txt'
+
+            $args[0] | Should Be 'https://www.youtube.com/'
+            $args[1] | Should Be '--print'
+            $args[2] | Should Be "%(title)s`t%(id)s`t%(ie_key)s`t%(webpage_url)s`t%(duration_string)s`t%(uploader)s`t%(view_count)s"
+            $args[3] | Should Be '--flat-playlist'
+            $args[4] | Should Be '--playlist-items'
+            $args[5] | Should Be '1:5'
+            $args[6] | Should Be '--cookies'
+            $args[7] | Should Be 'C:\Temp\cookies.txt'
+        }
+    }
+
     It 'plays the first search result without opening the selector' {
         Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
 
@@ -380,6 +399,37 @@ Describe 'Start-MPVStream behavior' {
             Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
             Remove-Item Function:\mpv -ErrorAction SilentlyContinue
             Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
+            Remove-Variable mpvArgs -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'plays the first homepage video without opening the selector' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig { Get-MPVStreamDefaultConfig }
+            function yt-dlp {
+                $script:ytdlpArgs = $args
+                return @(
+                    "Home Result`thome123`tYoutube`thttps://www.youtube.com/watch?v=home123`t1:00`tHome Channel`t100",
+                    "Second Home`tsecondhome`tYoutube`thttps://www.youtube.com/watch?v=secondhome`t2:00`tHome Channel`t200"
+                )
+            }
+            function Select-MPVStreamSearchResult { throw 'Selector should not be called when -Home -First is used.' }
+            function mpv { $script:mpvArgs = $args }
+            function Add-MPVStreamHistoryItem { }
+
+            Start-MPVStream -Home -First -Size Small -YtdlFormat audio
+
+            $script:ytdlpArgs[0] | Should Be 'https://www.youtube.com/'
+            $script:ytdlpArgs[5] | Should Be '1:10'
+            $script:mpvArgs[-1] | Should Be 'https://www.youtube.com/watch?v=home123'
+
+            Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
+            Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
+            Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
+            Remove-Variable ytdlpArgs -Scope Script -ErrorAction SilentlyContinue
             Remove-Variable mpvArgs -Scope Script -ErrorAction SilentlyContinue
         }
     }
@@ -772,6 +822,32 @@ Describe 'Start-MPVStream behavior' {
             $script:clipboardValue | Should Be 'https://example.test/copy'
 
             Remove-Item Function:\Resolve-MPVStreamPlayer -ErrorAction SilentlyContinue
+            Remove-Item Function:\Set-Clipboard -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
+            Remove-Variable clipboardValue -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'copies a selected homepage video without requiring a player' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig { Get-MPVStreamDefaultConfig }
+            function Resolve-MPVStreamPlayer { throw 'Player should not be resolved for -Home -CopyUrl.' }
+            function yt-dlp {
+                "Home Copy`thomecopy`tYoutube`thttps://www.youtube.com/watch?v=homecopy`t1:00`tHome Channel`t100"
+            }
+            function Select-MPVStreamSearchResult { param([object[]]$Items) $Items[0] }
+            function Set-Clipboard { param([string]$Value) $script:clipboardValue = $Value }
+            function Add-MPVStreamHistoryItem { throw 'History should not be written for -Home -CopyUrl.' }
+
+            Start-MPVStream -Home -CopyUrl
+
+            $script:clipboardValue | Should Be 'https://www.youtube.com/watch?v=homecopy'
+
+            Remove-Item Function:\Resolve-MPVStreamPlayer -ErrorAction SilentlyContinue
+            Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
+            Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
             Remove-Item Function:\Set-Clipboard -ErrorAction SilentlyContinue
             Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
             Remove-Variable clipboardValue -Scope Script -ErrorAction SilentlyContinue
