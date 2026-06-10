@@ -87,6 +87,7 @@ Describe 'Start-MPVStream behavior' {
             $config = Get-MPVStreamDefaultConfig
 
             $config.menuProvider | Should Be 'fzf'
+            $config.helpRenderer | Should Be 'Auto'
             $config.playerPath | Should Be $null
             $config.size | Should Be 'PIP'
             $config.ytdlFormat | Should Be '480p'
@@ -98,6 +99,12 @@ Describe 'Start-MPVStream behavior' {
             Normalize-MPVStreamMenuProvider 'Show-Menu' | Should Be 'BasicPrompt'
             Normalize-MPVStreamMenuProvider 'Basic Prompt' | Should Be 'BasicPrompt'
             Normalize-MPVStreamMenuProvider 'not-real' | Should Be 'fzf'
+            Normalize-MPVStreamHelpRenderer 'Auto' | Should Be 'Auto'
+            Normalize-MPVStreamHelpRenderer 'Glow' | Should Be 'Glow'
+            Normalize-MPVStreamHelpRenderer 'Markdown' | Should Be 'Glow'
+            Normalize-MPVStreamHelpRenderer 'Plain' | Should Be 'Plain'
+            Normalize-MPVStreamHelpRenderer 'Text' | Should Be 'Plain'
+            Normalize-MPVStreamHelpRenderer 'not-real' | Should Be 'Auto'
 
             $command = Get-Command Start-MPVStream -ErrorAction Stop
             ($command.Parameters['Config'].Aliases -contains 'cfg') | Should Be $true
@@ -269,6 +276,7 @@ Describe 'Start-MPVStream behavior' {
                 $config = Get-MPVStreamDefaultConfig
                 $config.maxResults = 12
                 $config.menuProvider = 'BasicPrompt'
+                $config.helpRenderer = 'Plain'
                 return $config
             }
 
@@ -276,10 +284,12 @@ Describe 'Start-MPVStream behavior' {
             $exported = Get-Content -LiteralPath $exportPath -Raw | ConvertFrom-Json
             $exported.maxResults | Should Be 12
             $exported.menuProvider | Should Be 'BasicPrompt'
+            $exported.helpRenderer | Should Be 'Plain'
 
             [pscustomobject]@{
                 maxResults = 8
                 menuProvider = 'Out-ConsoleGridView'
+                helpRenderer = 'Markdown'
                 ytdlFormat = 'audio'
             } | ConvertTo-Json | Out-File -LiteralPath $importPath -Encoding UTF8
 
@@ -287,6 +297,7 @@ Describe 'Start-MPVStream behavior' {
             $imported = Get-Content -LiteralPath $script:configPath -Raw | ConvertFrom-Json
             $imported.maxResults | Should Be 8
             $imported.menuProvider | Should Be 'OutConsoleGridView'
+            $imported.helpRenderer | Should Be 'Glow'
             $imported.ytdlFormat | Should Be 'audio'
             $imported.size | Should Be 'PIP'
 
@@ -296,6 +307,51 @@ Describe 'Start-MPVStream behavior' {
             Remove-Item -LiteralPath $exportPath -ErrorAction SilentlyContinue
             Remove-Item -LiteralPath $importPath -ErrorAction SilentlyContinue
             Remove-Variable configPath -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'renders markdown help with glow when configured and available' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function glow {
+                param([string]$Path)
+                process { $script:glowInput += $_ }
+            }
+
+            $config = Get-MPVStreamDefaultConfig
+            $config.helpRenderer = 'Glow'
+            $script:glowInput = @()
+
+            Write-MPVStreamHelp -Config $config
+
+            ($script:glowInput -join "`n") | Should Match '# Start-MPVStream'
+            ($script:glowInput -join "`n") | Should Match '\| `-Home`, `-Homepage` \|'
+
+            Remove-Item Function:\glow -ErrorAction SilentlyContinue
+            Remove-Variable glowInput -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'falls back to plain markdown help when glow is unavailable' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Test-MPVStreamGlowRenderer { $false }
+            function Write-Host { param([string]$Object) $script:helpText = $Object }
+
+            $config = Get-MPVStreamDefaultConfig
+            $config.helpRenderer = 'Auto'
+
+            Write-MPVStreamHelp -Config $config
+
+            $script:helpText | Should Match '# Start-MPVStream'
+            $script:helpText | Should Match '## Usage'
+            $script:helpText | Should Match '```powershell'
+
+            Remove-Item Function:\Test-MPVStreamGlowRenderer -ErrorAction SilentlyContinue
+            Remove-Item Function:\Write-Host -ErrorAction SilentlyContinue
+            Remove-Variable helpText -Scope Script -ErrorAction SilentlyContinue
         }
     }
 
