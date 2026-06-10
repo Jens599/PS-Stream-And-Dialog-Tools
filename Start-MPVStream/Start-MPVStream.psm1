@@ -228,7 +228,7 @@ function Start-MPVStream {
             } elseif ($Home) {
                 $Url = 'YouTube Home'
             } else {
-                Write-MPVStreamHelp
+                Write-MPVStreamHelp -Config $configData
                 return
             }
         }

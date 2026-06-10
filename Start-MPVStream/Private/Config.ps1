@@ -7,6 +7,7 @@ function Get-MPVStreamDefaultConfig {
         cookiePath       = $null
         playerPath       = $null
         menuProvider     = 'fzf'
+        helpRenderer     = 'Auto'
         size             = 'PIP'
         ytdlFormat       = '480p'
         maxResults       = 10
@@ -36,6 +37,7 @@ function Read-MPVStreamConfig {
             }
         }
         $config.menuProvider = Normalize-MPVStreamMenuProvider $config.menuProvider
+        $config.helpRenderer = Normalize-MPVStreamHelpRenderer $config.helpRenderer
     } catch {
         Write-Warning "Failed to read config file: $configPath"
     }
@@ -100,6 +102,7 @@ function Import-MPVStreamConfig {
         }
     }
     $config.menuProvider = Normalize-MPVStreamMenuProvider $config.menuProvider
+    $config.helpRenderer = Normalize-MPVStreamHelpRenderer $config.helpRenderer
 
     Save-MPVStreamConfig -Config $config
     Write-Host "Imported config: $(Get-MPVStreamConfigPath)" -ForegroundColor Green
@@ -114,6 +117,7 @@ function Invoke-MPVStreamConfig {
     while ($true) {
         $options = @(
             "Search UI Provider: $(Get-MPVStreamMenuProviderLabel $Config.menuProvider)"
+            "Help Renderer: $($Config.helpRenderer)"
             "Cookie Path: $(if ($Config.cookiePath) { $Config.cookiePath } else { '<not set>' })"
             "Player Path: $(if ($Config.playerPath) { $Config.playerPath } else { '<auto>' })"
             "Default Window Size: $($Config.size)"
@@ -136,21 +140,22 @@ function Invoke-MPVStreamConfig {
 
         switch ($selection) {
             0 { Set-MPVStreamMenuProvider -Config $Config }
-            1 { Set-MPVStreamCookiePath -Config $Config }
-            2 { Set-MPVStreamPlayerPath -Config $Config }
-            3 { $Config.size = Select-MPVStreamConfigValue -Title 'Default Window Size' -Options @('PIP', 'Small', 'Medium', 'Max') -CurrentValue $Config.size }
-            4 { $Config.ytdlFormat = Select-MPVStreamConfigValue -Title 'Default Quality / Format' -Options @('480p', '720p', '1080p', 'best', 'audio') -CurrentValue $Config.ytdlFormat }
-            5 { Set-MPVStreamMaxResults -Config $Config }
-            6 { $Config.audioOnly = -not $Config.audioOnly }
-            7 { $Config.background = -not $Config.background }
-            8 { $Config.loop = -not $Config.loop }
-            9 { $Config.hardwareAccel = -not $Config.hardwareAccel }
-            10 { $Config.reversePlaylist = -not $Config.reversePlaylist }
-            11 { $Config.noSubtitles = -not $Config.noSubtitles }
-            12 { Set-MPVStreamSubtitleLanguage -Config $Config }
-            13 { $Config | Format-List; Read-Host 'Press Enter to continue' | Out-Null }
-            14 { $Config = Get-MPVStreamDefaultConfig }
-            15 {
+            1 { Set-MPVStreamHelpRenderer -Config $Config }
+            2 { Set-MPVStreamCookiePath -Config $Config }
+            3 { Set-MPVStreamPlayerPath -Config $Config }
+            4 { $Config.size = Select-MPVStreamConfigValue -Title 'Default Window Size' -Options @('PIP', 'Small', 'Medium', 'Max') -CurrentValue $Config.size }
+            5 { $Config.ytdlFormat = Select-MPVStreamConfigValue -Title 'Default Quality / Format' -Options @('480p', '720p', '1080p', 'best', 'audio') -CurrentValue $Config.ytdlFormat }
+            6 { Set-MPVStreamMaxResults -Config $Config }
+            7 { $Config.audioOnly = -not $Config.audioOnly }
+            8 { $Config.background = -not $Config.background }
+            9 { $Config.loop = -not $Config.loop }
+            10 { $Config.hardwareAccel = -not $Config.hardwareAccel }
+            11 { $Config.reversePlaylist = -not $Config.reversePlaylist }
+            12 { $Config.noSubtitles = -not $Config.noSubtitles }
+            13 { Set-MPVStreamSubtitleLanguage -Config $Config }
+            14 { $Config | Format-List; Read-Host 'Press Enter to continue' | Out-Null }
+            15 { $Config = Get-MPVStreamDefaultConfig }
+            16 {
                 Save-MPVStreamConfig -Config $Config
                 Write-Host "Saved config: $(Get-MPVStreamConfigPath)" -ForegroundColor Green
                 return
@@ -269,6 +274,16 @@ function Set-MPVStreamMenuProvider {
     }
 
     $Config.menuProvider = $provider
+}
+
+function Set-MPVStreamHelpRenderer {
+    param([pscustomobject]$Config)
+
+    $options = @('Auto', 'Glow', 'Plain')
+    $selection = Select-MPVStreamMenuIndex -Options $options -Title 'Help Renderer' -Config $Config
+    if ($null -eq $selection) { return }
+
+    $Config.helpRenderer = Normalize-MPVStreamHelpRenderer $options[$selection]
 }
 
 function Normalize-MPVStreamMenuProvider {
