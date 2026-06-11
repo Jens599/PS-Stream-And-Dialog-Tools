@@ -81,6 +81,11 @@ function Start-MPVStream {
         [string]$Type,
 
         [Parameter()]
+        [ValidateSet('Videos', 'Shorts', 'Streams', 'Playlists', 'Community', 'Channels', 'Featured')]
+        [Alias('tab')]
+        [string]$ChannelTab = 'Videos',
+
+        [Parameter()]
         [Alias('ma', 'mpvarg')]
         [string[]]$MpvArgument,
 
@@ -287,6 +292,7 @@ function Start-MPVStream {
                 if ($Home) {
                     $selectedResult = Select-MPVStreamYouTubeSearchResult -Home -MaxResults $MaxResults -CookiePath $finalCookiePath -Type $Type -Config $configData -First:$First -Title 'YouTube Home' -EmptyMessage 'No homepage videos found.'
                     if ($null -eq $selectedResult) { return }
+                    $selectedResult = Resolve-MPVStreamYouTubeChannelTabSelection -Selection $selectedResult -ChannelTab $ChannelTab -CookiePath $finalCookiePath
 
                     $targetUrl = $selectedResult.Url
                     $historyTitle = $selectedResult.Title
@@ -296,6 +302,7 @@ function Start-MPVStream {
                     # Search for Playlists specifically using the 'sp' parameter.
                     $selectedResult = Select-MPVStreamYouTubeSearchResult -EncodedQuery $encodedQuery -Playlist:$Playlist -MaxResults $MaxResults -CookiePath $finalCookiePath -Type $Type -Config $configData -First:$First -Title "Playlist Results: $Url" -EmptyMessage 'No playlists found for that search.'
                     if ($null -eq $selectedResult) { return }
+                    $selectedResult = Resolve-MPVStreamYouTubeChannelTabSelection -Selection $selectedResult -ChannelTab $ChannelTab -CookiePath $finalCookiePath
 
                     $targetUrl = $selectedResult.Url
                     $historyTitle = $selectedResult.Title
@@ -305,6 +312,7 @@ function Start-MPVStream {
                     # Standard mixed search: videos, playlists, and channels.
                     $selectedResult = Select-MPVStreamYouTubeSearchResult -EncodedQuery $encodedQuery -Playlist:$Playlist -MaxResults $MaxResults -CookiePath $finalCookiePath -Type $Type -Config $configData -First:$First -Title "Search Results: $Url" -EmptyMessage 'No results found for that search.'
                     if ($null -eq $selectedResult) { return }
+                    $selectedResult = Resolve-MPVStreamYouTubeChannelTabSelection -Selection $selectedResult -ChannelTab $ChannelTab -CookiePath $finalCookiePath
 
                     $targetUrl = $selectedResult.Url
                     $historyTitle = $selectedResult.Title
