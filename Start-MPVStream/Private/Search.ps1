@@ -168,6 +168,94 @@ function Select-MPVStreamYouTubeSearchResult {
     }
 }
 
+function Get-MPVStreamYouTubeChannelTabUrl {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Url,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('Videos', 'Shorts', 'Streams', 'Playlists', 'Community', 'Channels', 'Featured')]
+        [string]$ChannelTab
+    )
+
+    $tabPath = switch ($ChannelTab) {
+        'Videos' { 'videos' }
+        'Shorts' { 'shorts' }
+        'Streams' { 'streams' }
+        'Playlists' { 'playlists' }
+        'Community' { 'community' }
+        'Channels' { 'channels' }
+        'Featured' { 'featured' }
+    }
+
+    $baseUrl = $Url -replace '[?#].*$', ''
+    $baseUrl = $baseUrl.TrimEnd('/')
+    $baseUrl = $baseUrl -replace '/(videos|shorts|streams|playlists|community|channels|featured)$', ''
+
+    return "$baseUrl/$tabPath"
+}
+
+function Test-MPVStreamYouTubeTabHasItem {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Url,
+
+        [string]$CookiePath
+    )
+
+    $arguments = @(
+        $Url,
+        '--flat-playlist',
+        '--playlist-items',
+        '1',
+        '--print',
+        '%(id)s'
+    )
+
+    if ($CookiePath) {
+        $arguments += '--cookies', $CookiePath
+    }
+
+    $output = @(yt-dlp @arguments 2>$null)
+    return ($LASTEXITCODE -eq 0 -and @($output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_ -ne 'NA' }).Count -gt 0)
+}
+
+function Resolve-MPVStreamYouTubeChannelTabSelection {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Selection,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('Videos', 'Shorts', 'Streams', 'Playlists', 'Community', 'Channels', 'Featured')]
+        [string]$ChannelTab,
+
+        [string]$CookiePath
+    )
+
+    if ($Selection.Type -ne 'Channel' -or [string]::IsNullOrWhiteSpace($Selection.Url)) {
+        return $Selection
+    }
+
+    $tabs = @('Videos', 'Shorts', 'Streams', 'Playlists', 'Community', 'Channels', 'Featured')
+    $startIndex = [Array]::IndexOf($tabs, $ChannelTab)
+    if ($startIndex -lt 0) { $startIndex = 0 }
+
+    foreach ($tab in @($tabs[$startIndex..($tabs.Count - 1)])) {
+        $tabUrl = Get-MPVStreamYouTubeChannelTabUrl -Url $Selection.Url -ChannelTab $tab
+        if (Test-MPVStreamYouTubeTabHasItem -Url $tabUrl -CookiePath $CookiePath) {
+            $Selection.Url = $tabUrl
+            $Selection.Type = "Channel/$tab"
+            if ($tab -ne $ChannelTab) {
+                Write-Warning "Channel $ChannelTab tab has no playable items. Using $tab tab instead."
+            }
+            return $Selection
+        }
+    }
+
+    Write-Warning "No playable channel tabs found. Using selected channel URL instead."
+    return $Selection
+}
+
 function ConvertFrom-MPVStreamSearchRow {
     param([string]$Row)
 
@@ -197,7 +285,7 @@ function ConvertFrom-MPVStreamSearchRow {
         $menuTitle = "$menuTitle | $($metadata -join ' | ')"
     }
 
-    [ordered]@{
+    [pscustomobject][ordered]@{
         Title     = $parts[0]
         ID        = $parts[1]
         Type      = $resultType

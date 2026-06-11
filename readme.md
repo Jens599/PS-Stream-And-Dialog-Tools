@@ -31,6 +31,7 @@ A comprehensive media player wrapper that provides streamlined playback experien
 - YouTube video and playlist search with duration, uploader, and view metadata when available
 - First-result playback for searches without opening the selector
 - Search result filtering by video, playlist, or channel
+- Channel selections play the `Videos` tab by default, with `-ChannelTab` / `-tab` to choose another tab and automatic fallback to the next playable tab
 - Clipboard playback with `-Clipboard`
 - Playback history with `-History` and `-Last`
 - Multiple window sizes (PIP, Small, Medium, Max)
@@ -65,6 +66,10 @@ play -History
 
 # Search videos only
 play 'live coding' -s -Type Video
+
+# Search channels and play a channel tab; defaults to Videos when -tab is omitted
+play 'live coding' -s -Type Channel
+play 'live coding' -s -Type Channel -tab Shorts
 
 # Search for playlists with audio-only
 play 'lofi beats' -s -p -f audio
