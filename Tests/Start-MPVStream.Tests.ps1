@@ -92,6 +92,7 @@ Describe 'Start-MPVStream behavior' {
             $config.size | Should Be 'PIP'
             $config.ytdlFormat | Should Be '480p'
             $config.maxResults | Should Be 10
+            $config.rememberPlaybackSpeed | Should Be $true
             $config.subtitleLanguage | Should Be 'en'
             Normalize-MPVStreamMenuProvider 'fzf' | Should Be 'fzf'
             Normalize-MPVStreamMenuProvider 'Microsoft.PowerShell.ConsoleGuiTools' | Should Be 'ConsoleGuiTools'
@@ -669,6 +670,8 @@ Describe 'Start-MPVStream behavior' {
             ($mpvArgs -contains '--ytdl-raw-options=cookies=C:\Temp\cookies.txt') | Should Be $true
             ($mpvArgs -contains '--ytdl-raw-options=no-download-archive=') | Should Be $true
             ($mpvArgs -contains '--slang=en') | Should Be $true
+            ($mpvArgs -contains '--save-position-on-quit') | Should Be $true
+            ($mpvArgs -contains '--watch-later-options=start,speed') | Should Be $true
             ($mpvArgs -contains '--speed=1.25') | Should Be $true
             ($mpvArgs -contains '--volume=70') | Should Be $true
 
@@ -685,6 +688,10 @@ Describe 'Start-MPVStream behavior' {
 
             $subtitleArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat audio -SubtitleLanguage @('en', 'ja'))
             ($subtitleArgs -contains '--slang=en,ja') | Should Be $true
+
+            $speedNotRememberedArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat audio -RememberPlaybackSpeed $false)
+            ($speedNotRememberedArgs -contains '--save-position-on-quit') | Should Be $false
+            ($speedNotRememberedArgs -contains '--watch-later-options=start,speed') | Should Be $false
         }
     }
 

@@ -189,6 +189,8 @@ function Start-MPVStream {
         if (-not $PSBoundParameters.ContainsKey('Background') -and $configData.background) { $Background = $true }
         if (-not $PSBoundParameters.ContainsKey('Loop') -and $configData.loop) { $Loop = $true }
         if (-not $PSBoundParameters.ContainsKey('HardwareAccel') -and $configData.hardwareAccel) { $HardwareAccel = $true }
+        $rememberPlaybackSpeed = $true
+        if ($configData.PSObject.Properties.Name -contains 'rememberPlaybackSpeed') { $rememberPlaybackSpeed = [bool]$configData.rememberPlaybackSpeed }
         if (-not $PSBoundParameters.ContainsKey('ReversePlaylist') -and $configData.reversePlaylist) { $ReversePlaylist = $true }
         if (-not $PSBoundParameters.ContainsKey('NoSubtitles') -and $configData.noSubtitles) { $NoSubtitles = $true }
         if (-not $PSBoundParameters.ContainsKey('SubtitleLanguage') -and $configData.subtitleLanguage) { $SubtitleLanguage = @($configData.subtitleLanguage) }
@@ -348,7 +350,7 @@ function Start-MPVStream {
 
         # --- 4. Format Mapping ---
         # --- 5. Argument Construction ---
-        $mpvArgs = New-MPVStreamMpvArgument -Size $Size -YtdlFormat $YtdlFormat -CookiePath $finalCookiePath -AudioOnly:$AudioOnly -Loop:$Loop -HardwareAccel:$HardwareAccel -Background:$Background -ReversePlaylist:$ReversePlaylist -NoSubtitles:$NoSubtitles -SubtitleLanguage $SubtitleLanguage -CustomArgument $MpvArgument
+        $mpvArgs = New-MPVStreamMpvArgument -Size $Size -YtdlFormat $YtdlFormat -CookiePath $finalCookiePath -AudioOnly:$AudioOnly -Loop:$Loop -HardwareAccel:$HardwareAccel -RememberPlaybackSpeed $rememberPlaybackSpeed -Background:$Background -ReversePlaylist:$ReversePlaylist -NoSubtitles:$NoSubtitles -SubtitleLanguage $SubtitleLanguage -CustomArgument $MpvArgument
 
         
         
@@ -375,15 +377,14 @@ function Start-MPVStream {
         # --- 6. Execution ---
         if ($Background) {
             try {
-                $processArgs = $mpvArgs + $targetUrl
-                Invoke-MPVStreamPlayer -Player $player -Argument $processArgs -Background
+                Invoke-MPVStreamPlayerWithUrl -Player $player -Argument $mpvArgs -Url $targetUrl -Background
                 Write-Host "→ Player started in background" -ForegroundColor Green
             } catch {
                 Write-Error "Failed to start player in background: $($_.Exception.Message)"
             }
         } else {
             try {
-                Invoke-MPVStreamPlayer -Player $player -Argument ($mpvArgs + $targetUrl)
+                Invoke-MPVStreamPlayerWithUrl -Player $player -Argument $mpvArgs -Url $targetUrl
             } catch {
                 Write-Error "Failed to start player: $($_.Exception.Message)"
             }
