@@ -16,6 +16,19 @@ function Get-MPVStreamSearchType {
     return 'Video'
 }
 
+function Normalize-MPVStreamType {
+    param([string]$Type)
+
+    if ([string]::IsNullOrWhiteSpace($Type)) { return $null }
+
+    switch -Regex ($Type.Trim()) {
+        '^(v|video|videos)$' { return 'Video' }
+        '^(p|pl|playlist|playlists)$' { return 'Playlist' }
+        '^(c|ch|channel|channels)$' { return 'Channel' }
+        default { return $null }
+    }
+}
+
 function New-MPVStreamYtdlpSearchArgument {
     param(
         [string]$EncodedQuery,
@@ -64,9 +77,10 @@ function Search-MPVStreamYouTube {
 
         [string]$CookiePath,
 
-        [ValidateSet('Video', 'Playlist', 'Channel')]
         [string]$Type
     )
+
+    $Type = Normalize-MPVStreamType $Type
 
     $ytdlArgs = New-MPVStreamYtdlpSearchArgument -EncodedQuery $EncodedQuery -Home:$Home -Playlist:$Playlist -MaxResults $MaxResults -CookiePath $CookiePath
     $searchRows = @(yt-dlp @ytdlArgs)

@@ -76,7 +76,6 @@ function Start-MPVStream {
         [switch]$First,
 
         [Parameter()]
-        [ValidateSet('Video', 'Playlist', 'Channel')]
         [Alias('t')]
         [string]$Type,
 
@@ -194,6 +193,15 @@ function Start-MPVStream {
         if (-not $PSBoundParameters.ContainsKey('ReversePlaylist') -and $configData.reversePlaylist) { $ReversePlaylist = $true }
         if (-not $PSBoundParameters.ContainsKey('NoSubtitles') -and $configData.noSubtitles) { $NoSubtitles = $true }
         if (-not $PSBoundParameters.ContainsKey('SubtitleLanguage') -and $configData.subtitleLanguage) { $SubtitleLanguage = @($configData.subtitleLanguage) }
+
+        if ($Type) {
+            $normalizedType = Normalize-MPVStreamType $Type
+            if (-not $normalizedType) {
+                Write-Error "Invalid type '$Type'. Use video/videos, playlist/playlists, or channel/channels."
+                return
+            }
+            $Type = $normalizedType
+        }
 
         if ($Clipboard) {
             $Url = Get-MPVStreamClipboardText
