@@ -41,7 +41,7 @@ play -Config
 | `-Home`, `-Homepage` | Pick from YouTube homepage recommendations |
 | `-Playlist`, `-p` | Search for playlists only |
 | `-First`, `-fi` | Play first result without opening the picker |
-| `-Type`, `-t <type>` | Filter mixed results: `Video`, `Playlist`, `Channel` |
+| `-Type`, `-t <type>` | Filter mixed results: `video`/`v`, `playlist`/`pl`, `channel`/`ch`; plurals accepted |
 | `-ChannelTab`, `-tab <tab>` | Channel tab to play when a channel is selected; defaults to `Videos` |
 | `-MaxResults`, `-max <num>` | Number of results to fetch, from `1` to `50` |
 | `-Clipboard`, `-cb` | Play URL from clipboard |

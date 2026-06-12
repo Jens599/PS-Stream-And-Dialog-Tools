@@ -106,6 +106,13 @@ Describe 'Start-MPVStream behavior' {
             Normalize-MPVStreamHelpRenderer 'Plain' | Should Be 'Plain'
             Normalize-MPVStreamHelpRenderer 'Text' | Should Be 'Plain'
             Normalize-MPVStreamHelpRenderer 'not-real' | Should Be 'Auto'
+            Normalize-MPVStreamType 'videos' | Should Be 'Video'
+            Normalize-MPVStreamType 'v' | Should Be 'Video'
+            Normalize-MPVStreamType 'playlists' | Should Be 'Playlist'
+            Normalize-MPVStreamType 'pl' | Should Be 'Playlist'
+            Normalize-MPVStreamType 'channels' | Should Be 'Channel'
+            Normalize-MPVStreamType 'ch' | Should Be 'Channel'
+            Normalize-MPVStreamType 'not-real' | Should Be $null
 
             $command = Get-Command Start-MPVStream -ErrorAction Stop
             ($command.Parameters['Config'].Aliases -contains 'cfg') | Should Be $true
@@ -636,8 +643,8 @@ Describe 'Start-MPVStream behavior' {
             }
 
             $videos = @(Search-MPVStreamYouTube -EncodedQuery 'query' -MaxResults 10 -Type Video)
-            $playlists = @(Search-MPVStreamYouTube -EncodedQuery 'query' -MaxResults 10 -Type Playlist)
-            $channels = @(Search-MPVStreamYouTube -EncodedQuery 'query' -MaxResults 10 -Type Channel)
+            $playlists = @(Search-MPVStreamYouTube -EncodedQuery 'query' -MaxResults 10 -Type playlists)
+            $channels = @(Search-MPVStreamYouTube -EncodedQuery 'query' -MaxResults 10 -Type ch)
 
             $videos.Count | Should Be 1
             $videos[0].Type | Should Be 'Video'
@@ -647,6 +654,39 @@ Describe 'Start-MPVStream behavior' {
             $channels[0].Type | Should Be 'Channel'
 
             Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'accepts friendly type names on the public command' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig { Get-MPVStreamDefaultConfig }
+            function mpv { }
+            function yt-dlp {
+                return @(
+                    "Creator`tUC123`tYoutubeTab`thttps://www.youtube.com/channel/UC123",
+                    "Only Result`tvideo123`tYoutube`thttps://www.youtube.com/watch?v=video123"
+                )
+            }
+            function Select-MPVStreamSearchResult {
+                param([object[]]$Items)
+                $script:selectedItems = $Items
+                return $Items[0]
+            }
+            function Add-MPVStreamHistoryItem { }
+
+            Start-MPVStream 'query' -Search -Type channels
+
+            $resultItems = @($script:selectedItems | Where-Object { -not $_.IsLoadMore })
+            $resultItems.Count | Should Be 1
+            $resultItems[0].Type | Should Be 'Channel'
+
+            Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
+            Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
+            Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
+            Remove-Variable selectedItems -Scope Script -ErrorAction SilentlyContinue
         }
     }
 
