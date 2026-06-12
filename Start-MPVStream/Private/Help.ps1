@@ -67,6 +67,7 @@ Config also supports:
 | Player Path | `mpv`, `mpvnet.com`, `mpvnet.exe`, or full path |
 | Search UI Provider | `fzf`, `ConsoleGuiTools`, or basic prompt fallback |
 | Help Renderer | `Auto`, `Glow`, or `Plain` Markdown rendering |
+| Remember Playback Speed | Save and restore mpv playback speed; defaults to `True` |
 
 ## Examples
 

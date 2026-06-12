@@ -93,6 +93,93 @@ function Invoke-MPVStreamPlayer {
     Start-Process @startProcessParameters
 }
 
+function Start-MPVStreamPlayerProcess {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Player,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Argument,
+
+        [switch]$Background
+    )
+
+    $processStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $processStartInfo.FileName = $Player.Name
+    $processStartInfo.UseShellExecute = $false
+    $processStartInfo.CreateNoWindow = [bool]$Background
+
+    foreach ($item in $Argument) {
+        [void]$processStartInfo.ArgumentList.Add($item)
+    }
+
+    return [System.Diagnostics.Process]::Start($processStartInfo)
+}
+
+function Send-MPVStreamIpcCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PipeName,
+
+        [Parameter(Mandatory = $true)]
+        [object[]]$Command,
+
+        [int]$TimeoutMilliseconds = 10000
+    )
+
+    $client = [System.IO.Pipes.NamedPipeClientStream]::new('.', $PipeName, [System.IO.Pipes.PipeDirection]::Out)
+    try {
+        $client.Connect($TimeoutMilliseconds)
+        $writer = [System.IO.StreamWriter]::new($client, [System.Text.UTF8Encoding]::new($false))
+        try {
+            $payload = @{ command = $Command } | ConvertTo-Json -Compress
+            $writer.WriteLine($payload)
+            $writer.Flush()
+        } finally {
+            $writer.Dispose()
+        }
+    } finally {
+        $client.Dispose()
+    }
+}
+
+function Invoke-MPVStreamPlayerWithUrl {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Player,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Argument,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Url,
+
+        [switch]$Background
+    )
+
+    $isWindowsPlatform = ($PSVersionTable.PSEdition -eq 'Desktop') -or $IsWindows
+    if ($Player.CommandType -eq 'Function' -or -not $isWindowsPlatform) {
+        Invoke-MPVStreamPlayer -Player $Player -Argument ($Argument + $Url) -Background:$Background
+        return
+    }
+
+    $pipeName = "mpvstream-$PID-$([guid]::NewGuid().ToString('N'))"
+    $startupArguments = $Argument + @(
+        '--force-window=yes',
+        '--idle=once',
+        "--input-ipc-server=\\.\pipe\$pipeName"
+    )
+
+    $process = Start-MPVStreamPlayerProcess -Player $Player -Argument $startupArguments -Background:$Background
+    try {
+        Send-MPVStreamIpcCommand -PipeName $pipeName -Command @('loadfile', $Url, 'replace')
+        if ($Background) { return }
+        $process.WaitForExit()
+    } finally {
+        if ($process) { $process.Dispose() }
+    }
+}
+
 function New-MPVStreamMpvArgument {
     param(
         [Parameter(Mandatory = $true)]
@@ -110,6 +197,8 @@ function New-MPVStreamMpvArgument {
         [switch]$Loop,
 
         [switch]$HardwareAccel,
+
+        [bool]$RememberPlaybackSpeed = $true,
 
         [switch]$Background,
 
@@ -154,6 +243,10 @@ function New-MPVStreamMpvArgument {
     if ($AudioOnly) { $arguments += '--no-video' }
     if ($Loop) { $arguments += '--loop=inf' }
     if ($HardwareAccel) { $arguments += '--hwdec=auto' }
+    if ($RememberPlaybackSpeed) {
+        $arguments += '--save-position-on-quit'
+        $arguments += '--watch-later-options=start,speed'
+    }
 
     if ($ReversePlaylist) {
         $arguments += '--ytdl-raw-options=playlist-items=1-'

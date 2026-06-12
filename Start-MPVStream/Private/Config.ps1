@@ -14,6 +14,7 @@ function Get-MPVStreamDefaultConfig {
         audioOnly        = $false
         background       = $false
         loop             = $false
+        rememberPlaybackSpeed = $true
         hardwareAccel    = $false
         reversePlaylist  = $false
         noSubtitles      = $false
@@ -126,6 +127,7 @@ function Invoke-MPVStreamConfig {
             "Audio Only: $($Config.audioOnly)"
             "Background Playback: $($Config.background)"
             "Loop Playback: $($Config.loop)"
+            "Remember Playback Speed: $($Config.rememberPlaybackSpeed)"
             "Hardware Acceleration: $($Config.hardwareAccel)"
             "Reverse Playlist: $($Config.reversePlaylist)"
             "Subtitles Disabled: $($Config.noSubtitles)"
@@ -149,13 +151,14 @@ function Invoke-MPVStreamConfig {
             7 { $Config.audioOnly = -not $Config.audioOnly }
             8 { $Config.background = -not $Config.background }
             9 { $Config.loop = -not $Config.loop }
-            10 { $Config.hardwareAccel = -not $Config.hardwareAccel }
-            11 { $Config.reversePlaylist = -not $Config.reversePlaylist }
-            12 { $Config.noSubtitles = -not $Config.noSubtitles }
-            13 { Set-MPVStreamSubtitleLanguage -Config $Config }
-            14 { $Config | Format-List; Read-Host 'Press Enter to continue' | Out-Null }
-            15 { $Config = Get-MPVStreamDefaultConfig }
-            16 {
+            10 { $Config.rememberPlaybackSpeed = -not $Config.rememberPlaybackSpeed }
+            11 { $Config.hardwareAccel = -not $Config.hardwareAccel }
+            12 { $Config.reversePlaylist = -not $Config.reversePlaylist }
+            13 { $Config.noSubtitles = -not $Config.noSubtitles }
+            14 { Set-MPVStreamSubtitleLanguage -Config $Config }
+            15 { $Config | Format-List; Read-Host 'Press Enter to continue' | Out-Null }
+            16 { $Config = Get-MPVStreamDefaultConfig }
+            17 {
                 Save-MPVStreamConfig -Config $Config
                 Write-Host "Saved config: $(Get-MPVStreamConfigPath)" -ForegroundColor Green
                 return
