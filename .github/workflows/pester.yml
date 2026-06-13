@@ -10,6 +10,7 @@ jobs:
   test-windows-powershell:
     name: powershell
     runs-on: windows-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -18,17 +19,22 @@ jobs:
       - name: Install Pester 4
         shell: powershell
         run: |
-          Install-Module Pester -RequiredVersion 4.10.1 -Scope CurrentUser -Force -SkipPublisherCheck
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -RequiredVersion 4.10.1 -Scope CurrentUser -Repository PSGallery -Force -SkipPublisherCheck
 
       - name: Run tests
         shell: powershell
         run: |
           Import-Module Pester -RequiredVersion 4.10.1
-          Invoke-Pester .\Tests -EnableExit
+          $result = Invoke-Pester .\Tests -PassThru
+          if ($result.FailedCount -gt 0) { exit 1 }
 
   test-pwsh:
     name: pwsh
     runs-on: windows-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
@@ -37,10 +43,12 @@ jobs:
       - name: Install Pester 4
         shell: pwsh
         run: |
-          Install-Module Pester -RequiredVersion 4.10.1 -Scope CurrentUser -Force -SkipPublisherCheck
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -RequiredVersion 4.10.1 -Scope CurrentUser -Repository PSGallery -Force -SkipPublisherCheck
 
       - name: Run tests
         shell: pwsh
         run: |
           Import-Module Pester -RequiredVersion 4.10.1
-          Invoke-Pester .\Tests -EnableExit
+          $result = Invoke-Pester .\Tests -PassThru
+          if ($result.FailedCount -gt 0) { exit 1 }
