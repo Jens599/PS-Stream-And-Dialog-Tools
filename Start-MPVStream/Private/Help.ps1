@@ -67,6 +67,7 @@ Config also supports:
 | Player Path | `mpv`, `mpvnet.com`, `mpvnet.exe`, or full path |
 | Search UI Provider | `fzf`, `ConsoleGuiTools`, or basic prompt fallback |
 | Help Renderer | `Auto`, `Glow`, or `Plain` Markdown rendering |
+| Modify Command | Submenu for command defaults, YTDL format pieces, and player/argument/URL/background overrides |
 | Remember Playback Speed | Save and restore mpv playback speed; defaults to `True` |
 
 ## Examples
@@ -102,6 +103,8 @@ play 'https://youtu.be/dQw4w9WgXcQ' -MpvArgument '--speed=1.25' -DryRun
 play 'https://youtu.be/dQw4w9WgXcQ' -DryRun -PassThru
 play 'https://youtu.be/dQw4w9WgXcQ' -Size Small -YtdlFormat 720p
 ```
+
+Use `play -Config` then `Modify Command` to edit playback defaults, YTDL format parts, and command parts like prepend, replace, or append arguments.
 
 ```powershell
 play 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' -CookiePath cookies.txt
