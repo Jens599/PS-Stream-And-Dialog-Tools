@@ -8,6 +8,17 @@ function Get-MPVStreamDefaultConfig {
         playerPath       = $null
         menuProvider     = 'fzf'
         helpRenderer     = 'Auto'
+        commandPlayer    = $null
+        commandPrependArgument = $null
+        commandReplaceArgument = $null
+        commandAppendArgument = $null
+        commandUrl       = $null
+        commandBackground = $null
+        ytdlVideoSelector = 'bestvideo'
+        ytdlVideoCodecFilter = 'auto'
+        ytdlMaxHeight    = 'from quality'
+        ytdlAudioSelector = 'bestaudio'
+        ytdlFallbackSelector = 'best'
         size             = 'PIP'
         ytdlFormat       = '480p'
         maxResults       = 10
@@ -115,23 +126,15 @@ function Invoke-MPVStreamConfig {
         [pscustomobject]$Config
     )
 
+    $defaultConfig = Get-MPVStreamDefaultConfig
+
     while ($true) {
         $options = @(
-            "Search UI Provider: $(Get-MPVStreamMenuProviderLabel $Config.menuProvider)"
-            "Help Renderer: $($Config.helpRenderer)"
-            "Cookie Path: $(if ($Config.cookiePath) { $Config.cookiePath } else { '<not set>' })"
-            "Player Path: $(if ($Config.playerPath) { $Config.playerPath } else { '<auto>' })"
-            "Default Window Size: $($Config.size)"
-            "Default Quality / Format: $($Config.ytdlFormat)"
-            "Max Search Results: $($Config.maxResults)"
-            "Audio Only: $($Config.audioOnly)"
-            "Background Playback: $($Config.background)"
-            "Loop Playback: $($Config.loop)"
-            "Remember Playback Speed: $($Config.rememberPlaybackSpeed)"
-            "Hardware Acceleration: $($Config.hardwareAccel)"
-            "Reverse Playlist: $($Config.reversePlaylist)"
-            "Subtitles Disabled: $($Config.noSubtitles)"
-            "Subtitle Language: $($Config.subtitleLanguage)"
+            New-MPVStreamConfigMenuOption -Title 'Search UI Provider' -CurrentValue (Get-MPVStreamMenuProviderLabel $Config.menuProvider) -DefaultValue (Get-MPVStreamMenuProviderLabel $defaultConfig.menuProvider)
+            New-MPVStreamConfigMenuOption -Title 'Help Renderer' -CurrentValue $Config.helpRenderer -DefaultValue $defaultConfig.helpRenderer
+            New-MPVStreamConfigMenuOption -Title 'Cookie Path' -CurrentValue $Config.cookiePath -DefaultValue '<not set>'
+            New-MPVStreamConfigMenuOption -Title 'Max Search Results' -CurrentValue $Config.maxResults -DefaultValue $defaultConfig.maxResults
+            New-MPVStreamConfigMenuOption -Title 'Modify Command' -CurrentValue (Get-MPVStreamCommandSummary -Config $Config) -DefaultValue 'defaults'
             'Show Current Config'
             'Reset Config'
             'Save and Exit'
@@ -144,27 +147,209 @@ function Invoke-MPVStreamConfig {
             0 { Set-MPVStreamMenuProvider -Config $Config }
             1 { Set-MPVStreamHelpRenderer -Config $Config }
             2 { Set-MPVStreamCookiePath -Config $Config }
-            3 { Set-MPVStreamPlayerPath -Config $Config }
-            4 { $Config.size = Select-MPVStreamConfigValue -Title 'Default Window Size' -Options @('PIP', 'Small', 'Medium', 'Max') -CurrentValue $Config.size }
-            5 { $Config.ytdlFormat = Select-MPVStreamConfigValue -Title 'Default Quality / Format' -Options @('480p', '720p', '1080p', 'best', 'audio') -CurrentValue $Config.ytdlFormat }
-            6 { Set-MPVStreamMaxResults -Config $Config }
-            7 { $Config.audioOnly = -not $Config.audioOnly }
-            8 { $Config.background = -not $Config.background }
-            9 { $Config.loop = -not $Config.loop }
-            10 { $Config.rememberPlaybackSpeed = -not $Config.rememberPlaybackSpeed }
-            11 { $Config.hardwareAccel = -not $Config.hardwareAccel }
-            12 { $Config.reversePlaylist = -not $Config.reversePlaylist }
-            13 { $Config.noSubtitles = -not $Config.noSubtitles }
-            14 { Set-MPVStreamSubtitleLanguage -Config $Config }
-            15 { $Config | Format-List; Read-Host 'Press Enter to continue' | Out-Null }
-            16 { $Config = Get-MPVStreamDefaultConfig }
-            17 {
+            3 { Set-MPVStreamMaxResults -Config $Config }
+            4 { Invoke-MPVStreamCommandConfig -Config $Config }
+            5 { $Config | Format-List; Read-Host 'Press Enter to continue' | Out-Null }
+            6 { $Config = Get-MPVStreamDefaultConfig }
+            7 {
                 Save-MPVStreamConfig -Config $Config
                 Write-Host "Saved config: $(Get-MPVStreamConfigPath)" -ForegroundColor Green
                 return
             }
         }
     }
+}
+
+function New-MPVStreamConfigMenuOption {
+    param(
+        [string]$Title,
+        [object]$CurrentValue,
+        [object]$DefaultValue
+    )
+
+    $displayDefault = if ($null -eq $DefaultValue -or [string]::IsNullOrWhiteSpace([string]$DefaultValue)) { '<not set>' } else { $DefaultValue }
+    $displayCurrent = if ($null -eq $CurrentValue -or [string]::IsNullOrWhiteSpace([string]$CurrentValue)) { $displayDefault } else { $CurrentValue }
+
+    [pscustomobject]@{
+        Title        = $Title
+        CurrentValue = $displayCurrent
+        DefaultValue = $displayDefault
+    }
+}
+
+function Get-MPVStreamCommandSummary {
+    param([pscustomobject]$Config)
+
+    $changed = 0
+    $defaultConfig = Get-MPVStreamDefaultConfig
+    foreach ($property in @('playerPath', 'size', 'ytdlFormat', 'audioOnly', 'background', 'loop', 'rememberPlaybackSpeed', 'hardwareAccel', 'reversePlaylist', 'noSubtitles', 'subtitleLanguage', 'ytdlVideoSelector', 'ytdlVideoCodecFilter', 'ytdlMaxHeight', 'ytdlAudioSelector', 'ytdlFallbackSelector')) {
+        if ($Config.PSObject.Properties.Name -contains $property) {
+            $value = $Config.$property
+            if ([string]$value -ne [string]$defaultConfig.$property) { $changed++ }
+        }
+    }
+
+    foreach ($property in @('commandPlayer', 'commandPrependArgument', 'commandReplaceArgument', 'commandAppendArgument', 'commandUrl', 'commandBackground')) {
+        if ($Config.PSObject.Properties.Name -contains $property) {
+            $value = $Config.$property
+            if ($null -ne $value -and -not [string]::IsNullOrWhiteSpace([string]$value)) { $changed++ }
+        }
+    }
+
+    if ($changed -eq 0) { return 'defaults' }
+    return "$changed custom setting(s)"
+}
+
+function Invoke-MPVStreamCommandConfig {
+    param([pscustomobject]$Config)
+
+    while ($true) {
+        $defaultConfig = Get-MPVStreamDefaultConfig
+        $options = @(
+            New-MPVStreamConfigMenuOption -Title 'Player Path' -CurrentValue $Config.playerPath -DefaultValue '<auto>'
+            New-MPVStreamConfigMenuOption -Title 'Default Window Size' -CurrentValue $Config.size -DefaultValue $defaultConfig.size
+            New-MPVStreamConfigMenuOption -Title 'Default Quality / Format' -CurrentValue $Config.ytdlFormat -DefaultValue $defaultConfig.ytdlFormat
+            New-MPVStreamConfigMenuOption -Title 'YTDL Video Selector' -CurrentValue $Config.ytdlVideoSelector -DefaultValue $defaultConfig.ytdlVideoSelector
+            New-MPVStreamConfigMenuOption -Title 'YTDL Video Codec Filter' -CurrentValue $Config.ytdlVideoCodecFilter -DefaultValue $defaultConfig.ytdlVideoCodecFilter
+            New-MPVStreamConfigMenuOption -Title 'YTDL Max Height' -CurrentValue $Config.ytdlMaxHeight -DefaultValue $defaultConfig.ytdlMaxHeight
+            New-MPVStreamConfigMenuOption -Title 'YTDL Audio Selector' -CurrentValue $Config.ytdlAudioSelector -DefaultValue $defaultConfig.ytdlAudioSelector
+            New-MPVStreamConfigMenuOption -Title 'YTDL Fallback Selector' -CurrentValue $Config.ytdlFallbackSelector -DefaultValue $defaultConfig.ytdlFallbackSelector
+            New-MPVStreamConfigMenuOption -Title 'Audio Only' -CurrentValue $Config.audioOnly -DefaultValue $defaultConfig.audioOnly
+            New-MPVStreamConfigMenuOption -Title 'Background Playback' -CurrentValue $Config.background -DefaultValue $defaultConfig.background
+            New-MPVStreamConfigMenuOption -Title 'Loop Playback' -CurrentValue $Config.loop -DefaultValue $defaultConfig.loop
+            New-MPVStreamConfigMenuOption -Title 'Remember Playback Speed' -CurrentValue $Config.rememberPlaybackSpeed -DefaultValue $defaultConfig.rememberPlaybackSpeed
+            New-MPVStreamConfigMenuOption -Title 'Hardware Acceleration' -CurrentValue $Config.hardwareAccel -DefaultValue $defaultConfig.hardwareAccel
+            New-MPVStreamConfigMenuOption -Title 'Reverse Playlist' -CurrentValue $Config.reversePlaylist -DefaultValue $defaultConfig.reversePlaylist
+            New-MPVStreamConfigMenuOption -Title 'Subtitles Disabled' -CurrentValue $Config.noSubtitles -DefaultValue $defaultConfig.noSubtitles
+            New-MPVStreamConfigMenuOption -Title 'Subtitle Language' -CurrentValue $Config.subtitleLanguage -DefaultValue $defaultConfig.subtitleLanguage
+            New-MPVStreamConfigMenuOption -Title 'Override Player' -CurrentValue $Config.commandPlayer -DefaultValue '<not set>'
+            New-MPVStreamConfigMenuOption -Title 'Prepend Arguments' -CurrentValue $Config.commandPrependArgument -DefaultValue '<not set>'
+            New-MPVStreamConfigMenuOption -Title 'Replace Arguments' -CurrentValue $Config.commandReplaceArgument -DefaultValue '<not set>'
+            New-MPVStreamConfigMenuOption -Title 'Append Arguments' -CurrentValue $Config.commandAppendArgument -DefaultValue '<not set>'
+            New-MPVStreamConfigMenuOption -Title 'Override URL' -CurrentValue $Config.commandUrl -DefaultValue '<not set>'
+            New-MPVStreamConfigMenuOption -Title 'Override Background' -CurrentValue $Config.commandBackground -DefaultValue '<not set>'
+            'Back'
+        )
+
+        $selection = Select-MPVStreamMenuIndex -Options $options -Title 'Modify Command' -Config $Config
+        if ($null -eq $selection) { return }
+
+        switch ($selection) {
+            0 { Set-MPVStreamPlayerPath -Config $Config }
+            1 { $Config.size = Select-MPVStreamConfigValue -Title 'Default Window Size' -Options @('PIP', 'Small', 'Medium', 'Max') -CurrentValue $Config.size }
+            2 { $Config.ytdlFormat = Select-MPVStreamConfigValue -Title 'Default Quality / Format' -Options @('480p', '720p', '1080p', 'best', 'audio') -CurrentValue $Config.ytdlFormat }
+            3 { Set-MPVStreamPresetTextValue -Config $Config -Property ytdlVideoSelector -Title 'YTDL Video Selector' -DefaultLabel $defaultConfig.ytdlVideoSelector -Presets @('bestvideo', 'bv', 'bv*', 'worstvideo', 'wv') -CustomPrompt 'Custom YTDL video selector' }
+            4 { Set-MPVStreamPresetTextValue -Config $Config -Property ytdlVideoCodecFilter -Title 'YTDL Video Codec Filter' -DefaultLabel $defaultConfig.ytdlVideoCodecFilter -Presets @('vcodec!*=av01', 'vcodec^=vp9', 'vcodec^=avc1', 'vcodec^=hev1', 'vcodec^=h264') -CustomPrompt 'Custom YTDL video codec filter' -AllowNone }
+            5 { Set-MPVStreamPresetTextValue -Config $Config -Property ytdlMaxHeight -Title 'YTDL Max Height' -DefaultLabel $defaultConfig.ytdlMaxHeight -Presets @('480', '720', '1080', '1440', '2160') -CustomPrompt 'Custom max height' -ValidateInteger -AllowNone }
+            6 { Set-MPVStreamPresetTextValue -Config $Config -Property ytdlAudioSelector -Title 'YTDL Audio Selector' -DefaultLabel $defaultConfig.ytdlAudioSelector -Presets @('bestaudio', 'ba', 'ba*', 'worstaudio', 'wa') -CustomPrompt 'Custom YTDL audio selector' }
+            7 { Set-MPVStreamPresetTextValue -Config $Config -Property ytdlFallbackSelector -Title 'YTDL Fallback Selector' -DefaultLabel $defaultConfig.ytdlFallbackSelector -Presets @('best', 'b', 'best[height<=720]', 'best[height<=1080]', 'worst') -CustomPrompt 'Custom YTDL fallback selector' -AllowNone }
+            8 { $Config.audioOnly = -not $Config.audioOnly }
+            9 { $Config.background = -not $Config.background }
+            10 { $Config.loop = -not $Config.loop }
+            11 { $Config.rememberPlaybackSpeed = -not $Config.rememberPlaybackSpeed }
+            12 { $Config.hardwareAccel = -not $Config.hardwareAccel }
+            13 { $Config.reversePlaylist = -not $Config.reversePlaylist }
+            14 { $Config.noSubtitles = -not $Config.noSubtitles }
+            15 { Set-MPVStreamSubtitleLanguage -Config $Config }
+            16 { Set-MPVStreamPresetTextValue -Config $Config -Property commandPlayer -Title 'Override Player' -DefaultLabel '<not set>' -Presets @('mpv', 'mpvnet.com', 'mpvnet.exe') -CustomPrompt 'Custom player path or command' }
+            17 { Set-MPVStreamPresetTextValue -Config $Config -Property commandPrependArgument -Title 'Prepend Arguments' -DefaultLabel '<not set>' -Presets @('--no-config', '--profile=high-quality', '--msg-level=all=warn', '--force-window=yes') -CustomPrompt 'Custom arguments to prepend' }
+            18 { Set-MPVStreamPresetTextValue -Config $Config -Property commandReplaceArgument -Title 'Replace Arguments' -DefaultLabel '<not set>' -Presets @('--no-config', '--idle=yes', '--force-window=yes', '--terminal=yes') -CustomPrompt 'Custom replacement arguments' }
+            19 { Set-MPVStreamPresetTextValue -Config $Config -Property commandAppendArgument -Title 'Append Arguments' -DefaultLabel '<not set>' -Presets @('--profile=high-quality', '--speed=1.25', '--volume=70', '--force-window=yes') -CustomPrompt 'Custom arguments to append' }
+            20 { Set-MPVStreamPresetTextValue -Config $Config -Property commandUrl -Title 'Override URL' -DefaultLabel '<not set>' -Presets @('https://www.youtube.com/', 'https://www.youtube.com/feed/subscriptions') -CustomPrompt 'Custom override URL' }
+            21 { Set-MPVStreamPresetTextValue -Config $Config -Property commandBackground -Title 'Override Background' -DefaultLabel '<not set>' -Presets @('true', 'false') -CustomPrompt $null -Boolean }
+            22 { return }
+        }
+    }
+}
+
+function Set-MPVStreamPresetTextValue {
+    param(
+        [pscustomobject]$Config,
+        [string]$Property,
+        [string]$Title,
+        [string]$DefaultLabel,
+        [string[]]$Presets,
+        [AllowNull()]
+        [string]$CustomPrompt,
+        [switch]$ValidateInteger,
+        [switch]$Boolean,
+        [switch]$AllowNone
+    )
+
+    $options = @("Use default ($DefaultLabel)") + $Presets
+    if ($AllowNone) { $options += 'None (omit)' }
+    if ($CustomPrompt) { $options += 'Custom...' }
+    $options += 'Back'
+
+    $currentValue = if ($null -eq $Config.$Property -or [string]::IsNullOrWhiteSpace([string]$Config.$Property)) { $DefaultLabel } else { $Config.$Property }
+    $selection = Select-MPVStreamMenuIndex -Options $options -Title "$Title (current: $currentValue)" -Config $Config
+    if ($null -eq $selection -or $selection -eq ($options.Count - 1)) { return }
+
+    if ($selection -eq 0) {
+        $Config.$Property = if ($DefaultLabel -eq '<not set>') { $null } else { $DefaultLabel }
+        return
+    }
+
+    $value = $options[$selection]
+    if ($AllowNone -and $value -eq 'None (omit)') {
+        $Config.$Property = '<none>'
+        return
+    }
+
+    if ($CustomPrompt -and $selection -eq ($options.Count - 2)) {
+        $value = Read-Host "$CustomPrompt (blank to clear)"
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            $Config.$Property = $null
+            return
+        }
+
+        if ($AllowNone -and (Test-MPVStreamNoneValue $value)) {
+            $Config.$Property = '<none>'
+            return
+        }
+    }
+
+    if ($ValidateInteger) {
+        $parsed = 0
+        if (-not [int]::TryParse($value, [ref]$parsed) -or $parsed -le 0) {
+            Write-Warning 'Please enter a positive number.'
+            Read-Host 'Press Enter to continue' | Out-Null
+            return
+        }
+
+        $Config.$Property = $parsed
+        return
+    }
+
+    if ($Boolean) {
+        $Config.$Property = [bool]::Parse($value)
+        return
+    }
+
+    $Config.$Property = $value
+}
+
+function Test-MPVStreamNoneValue {
+    param([object]$Value)
+
+    if ($null -eq $Value) { return $false }
+    [string]$Value -match '^(<none>|none|null|omit)$'
+}
+
+function Set-MPVStreamCommandBackground {
+    param([pscustomobject]$Config)
+
+    $value = Read-Host 'Override background? true, false, or blank to clear'
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        $Config.commandBackground = $null
+        return
+    }
+
+    if ($value -match '^(true|t|yes|y|1)$') { $Config.commandBackground = $true; return }
+    if ($value -match '^(false|f|no|n|0)$') { $Config.commandBackground = $false; return }
+
+    Write-Warning 'Please enter true, false, or blank.'
+    Read-Host 'Press Enter to continue' | Out-Null
 }
 
 function Select-MPVStreamConfigValue {

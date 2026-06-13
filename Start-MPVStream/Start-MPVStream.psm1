@@ -359,12 +359,24 @@ function Start-MPVStream {
 
         # --- 4. Format Mapping ---
         # --- 5. Argument Construction ---
-        $mpvArgs = New-MPVStreamMpvArgument -Size $Size -YtdlFormat $YtdlFormat -CookiePath $finalCookiePath -AudioOnly:$AudioOnly -Loop:$Loop -HardwareAccel:$HardwareAccel -RememberPlaybackSpeed $rememberPlaybackSpeed -Background:$Background -ReversePlaylist:$ReversePlaylist -NoSubtitles:$NoSubtitles -SubtitleLanguage $SubtitleLanguage -CustomArgument $MpvArgument
+        $mpvArgs = New-MPVStreamMpvArgument -Size $Size -YtdlFormat $YtdlFormat -CookiePath $finalCookiePath -AudioOnly:$AudioOnly -Loop:$Loop -HardwareAccel:$HardwareAccel -RememberPlaybackSpeed $rememberPlaybackSpeed -Background:$Background -ReversePlaylist:$ReversePlaylist -NoSubtitles:$NoSubtitles -SubtitleLanguage $SubtitleLanguage -CustomArgument $MpvArgument -YtdlVideoSelector $configData.ytdlVideoSelector -YtdlVideoCodecFilter $configData.ytdlVideoCodecFilter -YtdlMaxHeight $configData.ytdlMaxHeight -YtdlAudioSelector $configData.ytdlAudioSelector -YtdlFallbackSelector $configData.ytdlFallbackSelector
+
+        try {
+            $launch = Update-MPVStreamLaunchFromConfig -Config $configData -Player $player -Argument $mpvArgs -Url $targetUrl -Background:$Background
+        } catch {
+            Write-Error "Failed to apply command config: $($_.Exception.Message)"
+            return
+        }
+
+        $player = $launch.Player
+        $mpvArgs = @($launch.Arguments)
+        $targetUrl = $launch.Url
+        $Background = [bool]$launch.Background
 
         
         
         Write-Host "→ Launching:" -ForegroundColor Green 
-        Write-Host "    $($player.DisplayName) $($mpvArgs -join ' ') $targetUrl" -ForegroundColor Yellow 
+        Write-Host "    $($launch.Command)" -ForegroundColor Yellow 
 
         if ($DryRun) {
             Write-Host "→ Dry run: MPV was not started" -ForegroundColor Cyan
@@ -375,7 +387,7 @@ function Start-MPVStream {
                     Url       = $targetUrl
                     Title     = $historyTitle
                     Type      = $historyType
-                    Command   = "$($player.DisplayName) $($mpvArgs -join ' ') $targetUrl"
+                    Command   = $launch.Command
                 }
             }
             return

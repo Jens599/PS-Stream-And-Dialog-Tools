@@ -10,6 +10,173 @@ function Join-NativeArgument {
     }) -join ' '
 }
 
+function Format-MPVStreamLaunchCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Player,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Argument,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Url
+    )
+
+    "$($Player.DisplayName) $(Join-NativeArgument ($Argument + $Url))"
+}
+
+function Split-MPVStreamCommandArgumentText {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return @() }
+
+    @([regex]::Matches($Text, '"(?:\\.|[^"])*"|''(?:''''|[^''])*''|\S+') | ForEach-Object {
+        $value = $_.Value
+        if ($value.Length -ge 2 -and $value.StartsWith('"') -and $value.EndsWith('"')) {
+            return ($value.Substring(1, $value.Length - 2) -replace '\\"', '"')
+        }
+        if ($value.Length -ge 2 -and $value.StartsWith("'") -and $value.EndsWith("'")) {
+            return ($value.Substring(1, $value.Length - 2) -replace "''", "'")
+        }
+        return $value
+    })
+}
+
+function Update-MPVStreamLaunchFromConfig {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Config,
+
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Player,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Argument,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Url,
+
+        [switch]$Background
+    )
+
+    $launch = [pscustomobject]@{
+        Player     = $Player
+        Arguments  = @($Argument)
+        Url        = $Url
+        Background = [bool]$Background
+        Command    = Format-MPVStreamLaunchCommand -Player $Player -Argument $Argument -Url $Url
+    }
+
+    if ($Config.PSObject.Properties.Name -contains 'commandPlayer' -and -not [string]::IsNullOrWhiteSpace($Config.commandPlayer)) {
+        $resolvedPlayer = Resolve-MPVStreamPlayer -PlayerPath $Config.commandPlayer
+        if (-not $resolvedPlayer) { throw "Configured command player was not found: $($Config.commandPlayer)" }
+        $launch.Player = $resolvedPlayer
+    }
+
+    if ($Config.PSObject.Properties.Name -contains 'commandReplaceArgument' -and -not [string]::IsNullOrWhiteSpace($Config.commandReplaceArgument)) {
+        $launch.Arguments = @(Split-MPVStreamCommandArgumentText $Config.commandReplaceArgument)
+    } else {
+        if ($Config.PSObject.Properties.Name -contains 'commandPrependArgument' -and -not [string]::IsNullOrWhiteSpace($Config.commandPrependArgument)) {
+            $launch.Arguments = @(Split-MPVStreamCommandArgumentText $Config.commandPrependArgument) + @($launch.Arguments)
+        }
+
+        if ($Config.PSObject.Properties.Name -contains 'commandAppendArgument' -and -not [string]::IsNullOrWhiteSpace($Config.commandAppendArgument)) {
+            $launch.Arguments = @($launch.Arguments) + @(Split-MPVStreamCommandArgumentText $Config.commandAppendArgument)
+        }
+    }
+
+    if ($Config.PSObject.Properties.Name -contains 'commandUrl' -and -not [string]::IsNullOrWhiteSpace($Config.commandUrl)) { $launch.Url = $Config.commandUrl }
+    if ($Config.PSObject.Properties.Name -contains 'commandBackground' -and $null -ne $Config.commandBackground) { $launch.Background = [bool]$Config.commandBackground }
+
+    $launch.Command = Format-MPVStreamLaunchCommand -Player $launch.Player -Argument $launch.Arguments -Url $launch.Url
+    return $launch
+}
+
+function Test-MPVStreamFormatNoneValue {
+    param([object]$Value)
+
+    if ($null -eq $Value) { return $false }
+    [string]$Value -match '^(<none>|none|null|omit)$'
+}
+
+function Test-MPVStreamFormatAutoValue {
+    param([object]$Value)
+
+    if ($null -eq $Value) { return $true }
+    [string]::IsNullOrWhiteSpace([string]$Value) -or [string]$Value -match '^(auto|from quality)$'
+}
+
+function New-MPVStreamYtdlFormatExpression {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('480p', '720p', '1080p', 'best', 'audio')]
+        [string]$YtdlFormat,
+
+        [switch]$HardwareAccel,
+
+        [string]$VideoSelector,
+
+        [string]$VideoCodecFilter,
+
+        [object]$MaxHeight,
+
+        [string]$AudioSelector,
+
+        [string]$FallbackSelector
+    )
+
+    $heightMap = @{
+        '480p'  = 480
+        '720p'  = 720
+        '1080p' = 1080
+    }
+
+    $videoSelectorValue = if (Test-MPVStreamFormatAutoValue $VideoSelector) { 'bestvideo' } else { $VideoSelector }
+    $audioSelectorValue = if (Test-MPVStreamFormatAutoValue $AudioSelector) { 'bestaudio' } else { $AudioSelector }
+    $fallbackSelectorValue = if (Test-MPVStreamFormatNoneValue $FallbackSelector) { $null } elseif (Test-MPVStreamFormatAutoValue $FallbackSelector) { 'best' } else { $FallbackSelector }
+
+    $effectiveMaxHeight = $null
+    $omitHeight = Test-MPVStreamFormatNoneValue $MaxHeight
+    $parsedMaxHeight = 0
+    if (-not $omitHeight -and -not (Test-MPVStreamFormatAutoValue $MaxHeight) -and [int]::TryParse([string]$MaxHeight, [ref]$parsedMaxHeight) -and $parsedMaxHeight -gt 0) {
+        $effectiveMaxHeight = $parsedMaxHeight
+    } elseif (-not $omitHeight -and $heightMap.ContainsKey($YtdlFormat)) {
+        $effectiveMaxHeight = $heightMap[$YtdlFormat]
+    }
+
+    $effectiveCodecFilter = $VideoCodecFilter
+    if (Test-MPVStreamFormatNoneValue $effectiveCodecFilter) {
+        $effectiveCodecFilter = $null
+    } elseif ((Test-MPVStreamFormatAutoValue $effectiveCodecFilter) -and $HardwareAccel -and $YtdlFormat -ne 'audio') {
+        $effectiveCodecFilter = 'vcodec!*=av01'
+    } elseif (Test-MPVStreamFormatAutoValue $effectiveCodecFilter) {
+        $effectiveCodecFilter = $null
+    }
+
+    if ($YtdlFormat -eq 'audio') {
+        if ($fallbackSelectorValue) { return "$audioSelectorValue/$fallbackSelectorValue" }
+        return $audioSelectorValue
+    }
+
+    $videoFilters = @()
+    if (-not [string]::IsNullOrWhiteSpace($effectiveCodecFilter)) { $videoFilters += "[$effectiveCodecFilter]" }
+    if ($effectiveMaxHeight) { $videoFilters += "[height<=$effectiveMaxHeight]" }
+
+    $videoFormat = "$videoSelectorValue$($videoFilters -join '')+$audioSelectorValue"
+    if (-not $fallbackSelectorValue) {
+        return $videoFormat
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($effectiveCodecFilter)) {
+        $fallbackFilters = @("[$effectiveCodecFilter]")
+        if ($effectiveMaxHeight) { $fallbackFilters += "[height<=$effectiveMaxHeight]" }
+        $heightFallback = if ($effectiveMaxHeight) { "/$fallbackSelectorValue[height<=$effectiveMaxHeight]" } else { '' }
+        return "$videoFormat/$fallbackSelectorValue$($fallbackFilters -join '')$heightFallback"
+    }
+
+    return "$videoFormat/$fallbackSelectorValue"
+}
+
 function Resolve-MPVStreamPlayer {
     param([string]$PlayerPath)
 
@@ -211,25 +378,20 @@ function New-MPVStreamMpvArgument {
 
         [string[]]$SubtitleLanguage,
 
-        [string[]]$CustomArgument
+        [string[]]$CustomArgument,
+
+        [string]$YtdlVideoSelector,
+
+        [string]$YtdlVideoCodecFilter,
+
+        [object]$YtdlMaxHeight,
+
+        [string]$YtdlAudioSelector,
+
+        [string]$YtdlFallbackSelector
     )
 
-    $formatMap = @{
-        '480p'  = 'bestvideo[height<=480]+bestaudio/best'
-        '720p'  = 'bestvideo[height<=720]+bestaudio/best'
-        '1080p' = 'bestvideo[height<=1080]+bestaudio/best'
-        'best'  = 'bestvideo+bestaudio/best'
-        'audio' = 'bestaudio/best'
-    }
-    if ($HardwareAccel -and -not $AudioOnly) {
-        $formatMap = @{
-            '480p'  = 'bestvideo[vcodec!*=av01][height<=480]+bestaudio/best[vcodec!*=av01][height<=480]/best[height<=480]'
-            '720p'  = 'bestvideo[vcodec!*=av01][height<=720]+bestaudio/best[vcodec!*=av01][height<=720]/best[height<=720]'
-            '1080p' = 'bestvideo[vcodec!*=av01][height<=1080]+bestaudio/best[vcodec!*=av01][height<=1080]/best[height<=1080]'
-            'best'  = 'bestvideo[vcodec!*=av01]+bestaudio/best[vcodec!*=av01]/best'
-            'audio' = 'bestaudio/best'
-        }
-    }
+    $ytdlFormatExpression = New-MPVStreamYtdlFormatExpression -YtdlFormat $YtdlFormat -HardwareAccel:($HardwareAccel -and -not $AudioOnly) -VideoSelector $YtdlVideoSelector -VideoCodecFilter $YtdlVideoCodecFilter -MaxHeight $YtdlMaxHeight -AudioSelector $YtdlAudioSelector -FallbackSelector $YtdlFallbackSelector
 
     $arguments = @()
     if (-not $Background) { $arguments += '--terminal=yes' }
@@ -265,7 +427,7 @@ function New-MPVStreamMpvArgument {
         $arguments += '--ytdl-raw-options=playlist-reverse='
     }
 
-    $arguments += "--ytdl-format=$($formatMap[$YtdlFormat])"
+    $arguments += "--ytdl-format=$ytdlFormatExpression"
 
     if ($CookiePath) {
         $arguments += "--ytdl-raw-options=cookies=$CookiePath"

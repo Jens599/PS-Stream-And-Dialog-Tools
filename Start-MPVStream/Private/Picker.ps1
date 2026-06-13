@@ -46,7 +46,7 @@ function Select-MPVStreamSearchResult {
 function Select-MPVStreamMenuIndex {
     param(
         [Parameter(Mandatory = $true)]
-        [string[]]$Options,
+        [object[]]$Options,
 
         [Parameter(Mandatory = $true)]
         [string]$Title,
@@ -56,12 +56,26 @@ function Select-MPVStreamMenuIndex {
     )
 
     $items = for ($i = 0; $i -lt $Options.Count; $i++) {
+        $option = $Options[$i]
+        if ($option -isnot [string]) {
+            [pscustomobject]@{
+                Index        = $i
+                Title        = $option.Title
+                Type         = 'Option'
+                Url          = $null
+                MenuTitle    = $option.Title
+                CurrentValue = $option.CurrentValue
+                DefaultValue = $option.DefaultValue
+            }
+            continue
+        }
+
         [pscustomobject]@{
             Index     = $i
-            Title     = $Options[$i]
+            Title     = $option
             Type      = 'Option'
             Url       = $null
-            MenuTitle = $Options[$i]
+            MenuTitle = $option
         }
     }
 
@@ -88,6 +102,11 @@ function Select-MPVStreamSearchResultWithFzf {
         $header = @(
             $Title,
             ('{0,-3} {1,-8} {2,-8} {3,12}  {4,-20}  {5}' -f 'No', 'Type', 'Length', 'Views', 'Uploader', 'Title')
+        ) -join "`n"
+    } elseif (Test-MPVStreamOptionMenuHasValueColumns -Items $Items) {
+        $header = @(
+            $Title,
+            ('{0,-3} {1,-32} {2,-24} {3}' -f 'No', 'Setting', 'Current', 'Default')
         ) -join "`n"
     }
 
@@ -119,10 +138,17 @@ function Select-MPVStreamSearchResultWithConsoleGridView {
 
     $gridItems = for ($i = 0; $i -lt $Items.Count; $i++) {
         if ($isOptionMenu) {
-            [pscustomobject]@{
+            $gridItem = [ordered]@{
                 Index = $i
                 Title = $Items[$i].Title
             }
+
+            if (Test-MPVStreamOptionMenuHasValueColumns -Items $Items) {
+                $gridItem.Current = Get-MPVStreamDisplayValue $Items[$i].CurrentValue
+                $gridItem.Default = Get-MPVStreamDisplayValue $Items[$i].DefaultValue
+            }
+
+            [pscustomobject]$gridItem
             continue
         }
 
@@ -150,6 +176,8 @@ function Select-MPVStreamSearchResultWithBasicPrompt {
 
     if (-not $isOptionMenu) {
         Write-Host ('  {0,-3} {1,-8} {2,-8} {3,12}  {4,-20}  {5}' -f 'No', 'Type', 'Length', 'Views', 'Uploader', 'Title') -ForegroundColor DarkGray
+    } elseif (Test-MPVStreamOptionMenuHasValueColumns -Items $Items) {
+        Write-Host ('  {0,-3} {1,-32} {2,-24} {3}' -f 'No', 'Setting', 'Current', 'Default') -ForegroundColor DarkGray
     }
 
     for ($i = 0; $i -lt $Items.Count; $i++) {
@@ -192,7 +220,23 @@ function Format-MPVStreamOptionLine {
         [int]$Index
     )
 
+    if (Test-MPVStreamOptionMenuHasValueColumns -Items @($Item)) {
+        return '{0:00}  {1,-32} {2,-24} {3}' -f $Index, (Limit-MPVStreamText -Text $Item.Title -Length 32), (Limit-MPVStreamText -Text (Get-MPVStreamDisplayValue $Item.CurrentValue) -Length 24), (Get-MPVStreamDisplayValue $Item.DefaultValue)
+    }
+
     '{0:00}  {1}' -f $Index, (Get-MPVStreamDisplayValue $Item.Title)
+}
+
+function Test-MPVStreamOptionMenuHasValueColumns {
+    param([object[]]$Items)
+
+    foreach ($item in $Items) {
+        if (($item.PSObject.Properties.Name -contains 'CurrentValue') -or ($item.PSObject.Properties.Name -contains 'DefaultValue')) {
+            return $true
+        }
+    }
+
+    return $false
 }
 
 function Format-MPVStreamSearchResultLine {

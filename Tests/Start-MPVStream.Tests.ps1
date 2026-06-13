@@ -89,6 +89,17 @@ Describe 'Start-MPVStream behavior' {
             $config.menuProvider | Should Be 'fzf'
             $config.helpRenderer | Should Be 'Auto'
             $config.playerPath | Should Be $null
+            $config.commandPlayer | Should Be $null
+            $config.commandPrependArgument | Should Be $null
+            $config.commandReplaceArgument | Should Be $null
+            $config.commandAppendArgument | Should Be $null
+            $config.commandUrl | Should Be $null
+            $config.commandBackground | Should Be $null
+            $config.ytdlVideoSelector | Should Be 'bestvideo'
+            $config.ytdlVideoCodecFilter | Should Be 'auto'
+            $config.ytdlMaxHeight | Should Be 'from quality'
+            $config.ytdlAudioSelector | Should Be 'bestaudio'
+            $config.ytdlFallbackSelector | Should Be 'best'
             $config.size | Should Be 'PIP'
             $config.ytdlFormat | Should Be '480p'
             $config.maxResults | Should Be 10
@@ -331,6 +342,7 @@ Describe 'Start-MPVStream behavior' {
                 $config.maxResults = 12
                 $config.menuProvider = 'BasicPrompt'
                 $config.helpRenderer = 'Plain'
+                $config.commandAppendArgument = '--profile=high-quality'
                 return $config
             }
 
@@ -339,11 +351,13 @@ Describe 'Start-MPVStream behavior' {
             $exported.maxResults | Should Be 12
             $exported.menuProvider | Should Be 'BasicPrompt'
             $exported.helpRenderer | Should Be 'Plain'
+            $exported.commandAppendArgument | Should Be '--profile=high-quality'
 
             [pscustomobject]@{
                 maxResults = 8
                 menuProvider = 'Out-ConsoleGridView'
                 helpRenderer = 'Markdown'
+                commandAppendArgument = '--profile=high-quality'
                 ytdlFormat = 'audio'
             } | ConvertTo-Json | Out-File -LiteralPath $importPath -Encoding UTF8
 
@@ -352,6 +366,7 @@ Describe 'Start-MPVStream behavior' {
             $imported.maxResults | Should Be 8
             $imported.menuProvider | Should Be 'OutConsoleGridView'
             $imported.helpRenderer | Should Be 'Glow'
+            $imported.commandAppendArgument | Should Be '--profile=high-quality'
             $imported.ytdlFormat | Should Be 'audio'
             $imported.size | Should Be 'PIP'
 
@@ -782,6 +797,18 @@ Describe 'Start-MPVStream behavior' {
             $hardwareVideoArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat '720p' -HardwareAccel)
             ($hardwareVideoArgs -contains '--hwdec=auto-safe') | Should Be $true
             ($hardwareVideoArgs -contains '--ytdl-format=bestvideo[vcodec!*=av01][height<=720]+bestaudio/best[vcodec!*=av01][height<=720]/best[height<=720]') | Should Be $true
+
+            $customYtdlArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat best -YtdlVideoSelector 'bv*' -YtdlVideoCodecFilter 'vcodec^=vp9' -YtdlMaxHeight 1440 -YtdlAudioSelector 'ba' -YtdlFallbackSelector 'b')
+            ($customYtdlArgs -contains '--ytdl-format=bv*[vcodec^=vp9][height<=1440]+ba/b[vcodec^=vp9][height<=1440]/b[height<=1440]') | Should Be $true
+
+            $noneCodecArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat '720p' -HardwareAccel -YtdlVideoCodecFilter '<none>')
+            ($noneCodecArgs -contains '--ytdl-format=bestvideo[height<=720]+bestaudio/best') | Should Be $true
+
+            $noneHeightFallbackArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat '720p' -YtdlMaxHeight '<none>' -YtdlFallbackSelector '<none>')
+            ($noneHeightFallbackArgs -contains '--ytdl-format=bestvideo+bestaudio') | Should Be $true
+
+            $defaultStringArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat '720p' -HardwareAccel -YtdlVideoSelector bestvideo -YtdlVideoCodecFilter auto -YtdlMaxHeight 'from quality' -YtdlAudioSelector bestaudio -YtdlFallbackSelector best)
+            ($defaultStringArgs -contains '--ytdl-format=bestvideo[vcodec!*=av01][height<=720]+bestaudio/best[vcodec!*=av01][height<=720]/best[height<=720]') | Should Be $true
         }
     }
 
@@ -930,6 +957,35 @@ Describe 'Start-MPVStream behavior' {
             $launch.Type | Should Be 'Direct'
             ($launch.Arguments -contains '--ytdl-format=bestaudio/best') | Should Be $true
             $launch.Command | Should Match 'https://example\.test/video'
+
+            Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'applies configured command part overrides before launch output' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig {
+                $config = Get-MPVStreamDefaultConfig
+                $config.commandPrependArgument = '--msg-level=all=warn'
+                $config.commandAppendArgument = '--profile=high-quality'
+                $config.commandUrl = 'https://example.test/modified'
+                return $config
+            }
+
+            function mpv { throw 'mpv should not be started during pass-through dry run.' }
+            function Add-MPVStreamHistoryItem { throw 'History should not be written during pass-through dry run.' }
+
+            $launch = Start-MPVStream 'https://example.test/original' -DryRun -PassThru -Size Small -YtdlFormat audio
+
+            $launch.Arguments[0] | Should Be '--msg-level=all=warn'
+            ($launch.Arguments -contains '--profile=high-quality') | Should Be $true
+            $launch.Url | Should Be 'https://example.test/modified'
+            $launch.Command | Should Match '--msg-level=all=warn'
+            $launch.Command | Should Match '--profile=high-quality'
+            $launch.Command | Should Match 'https://example\.test/modified'
 
             Remove-Item Function:\mpv -ErrorAction SilentlyContinue
             Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
