@@ -7,25 +7,40 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    name: ${{ matrix.shell }}
+  test-windows-powershell:
+    name: powershell
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shell: [powershell, pwsh]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install Pester 4
-        shell: ${{ matrix.shell }}
+        shell: powershell
         run: |
           Install-Module Pester -RequiredVersion 4.10.1 -Scope CurrentUser -Force -SkipPublisherCheck
 
       - name: Run tests
-        shell: ${{ matrix.shell }}
+        shell: powershell
+        run: |
+          Import-Module Pester -RequiredVersion 4.10.1
+          Invoke-Pester .\Tests -EnableExit
+
+  test-pwsh:
+    name: pwsh
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Pester 4
+        shell: pwsh
+        run: |
+          Install-Module Pester -RequiredVersion 4.10.1 -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Run tests
+        shell: pwsh
         run: |
           Import-Module Pester -RequiredVersion 4.10.1
           Invoke-Pester .\Tests -EnableExit
