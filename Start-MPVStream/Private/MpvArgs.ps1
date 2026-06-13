@@ -106,6 +106,24 @@ function Test-MPVStreamFormatAutoValue {
     [string]::IsNullOrWhiteSpace([string]$Value) -or [string]$Value -match '^(auto|from quality)$'
 }
 
+function Test-MPVStreamCommandAutoValue {
+    param([object]$Value)
+
+    if ($null -eq $Value) { return $true }
+    [string]::IsNullOrWhiteSpace([string]$Value) -or [string]$Value -match '^(auto|from size)$'
+}
+
+function Test-MPVStreamCommandEnabledValue {
+    param(
+        [object]$Value,
+        [bool]$AutoValue
+    )
+
+    if (Test-MPVStreamFormatNoneValue $Value) { return $false }
+    if (Test-MPVStreamCommandAutoValue $Value) { return $AutoValue }
+    [string]$Value -match '^(true|t|yes|y|1)$'
+}
+
 function New-MPVStreamYtdlFormatExpression {
     param(
         [Parameter(Mandatory = $true)]
@@ -388,38 +406,102 @@ function New-MPVStreamMpvArgument {
 
         [string]$YtdlAudioSelector,
 
-        [string]$YtdlFallbackSelector
+        [string]$YtdlFallbackSelector,
+
+        [object]$CommandTerminal,
+
+        [object]$CommandGeometry,
+
+        [object]$CommandAutofit,
+
+        [object]$CommandNoBorder,
+
+        [object]$CommandOntop,
+
+        [object]$CommandHwdec,
+
+        [object]$CommandSavePosition,
+
+        [object]$CommandWatchLaterOptions,
+
+        [bool]$CommandNoDownloadArchive = $true
     )
 
     $ytdlFormatExpression = New-MPVStreamYtdlFormatExpression -YtdlFormat $YtdlFormat -HardwareAccel:($HardwareAccel -and -not $AudioOnly) -VideoSelector $YtdlVideoSelector -VideoCodecFilter $YtdlVideoCodecFilter -MaxHeight $YtdlMaxHeight -AudioSelector $YtdlAudioSelector -FallbackSelector $YtdlFallbackSelector
 
+    $sizeGeometry = @{
+        'PIP'    = '320x180-10-10'
+        'Small'  = '854x480-10-10'
+        'Medium' = '1280x720-10-10'
+    }
+
+    $sizeAutofit = @{
+        'PIP'    = '320x180'
+        'Small'  = '854x480'
+        'Medium' = '1280x720'
+    }
+
     $arguments = @()
-    if (-not $Background) { $arguments += '--terminal=yes' }
+    if (Test-MPVStreamCommandEnabledValue -Value $CommandTerminal -AutoValue:(-not [bool]$Background)) { $arguments += '--terminal=yes' }
 
     switch ($Size) {
         'PIP' {
-            $arguments += '--geometry=320x180-10-10'
-            $arguments += '--autofit=320x180'
-            $arguments += '--no-border'
-            $arguments += '--ontop'
+            if (-not (Test-MPVStreamFormatNoneValue $CommandGeometry)) {
+                $geometry = if (Test-MPVStreamCommandAutoValue $CommandGeometry) { $sizeGeometry[$Size] } else { [string]$CommandGeometry }
+                if ($geometry) { $arguments += "--geometry=$geometry" }
+            }
+            if (-not (Test-MPVStreamFormatNoneValue $CommandAutofit)) {
+                $autofit = if (Test-MPVStreamCommandAutoValue $CommandAutofit) { $sizeAutofit[$Size] } else { [string]$CommandAutofit }
+                if ($autofit) { $arguments += "--autofit=$autofit" }
+            }
+            if (Test-MPVStreamCommandEnabledValue -Value $CommandNoBorder -AutoValue:$true) { $arguments += '--no-border' }
+            if (Test-MPVStreamCommandEnabledValue -Value $CommandOntop -AutoValue:$true) { $arguments += '--ontop' }
         }
         'Small' {
-            $arguments += '--geometry=854x480-10-10'
-            $arguments += '--autofit=854x480'
+            if (-not (Test-MPVStreamFormatNoneValue $CommandGeometry)) {
+                $geometry = if (Test-MPVStreamCommandAutoValue $CommandGeometry) { $sizeGeometry[$Size] } else { [string]$CommandGeometry }
+                if ($geometry) { $arguments += "--geometry=$geometry" }
+            }
+            if (-not (Test-MPVStreamFormatNoneValue $CommandAutofit)) {
+                $autofit = if (Test-MPVStreamCommandAutoValue $CommandAutofit) { $sizeAutofit[$Size] } else { [string]$CommandAutofit }
+                if ($autofit) { $arguments += "--autofit=$autofit" }
+            }
+            if (Test-MPVStreamCommandEnabledValue -Value $CommandNoBorder -AutoValue:$false) { $arguments += '--no-border' }
+            if (Test-MPVStreamCommandEnabledValue -Value $CommandOntop -AutoValue:$false) { $arguments += '--ontop' }
         }
         'Medium' {
-            $arguments += '--geometry=1280x720-10-10'
-            $arguments += '--autofit=1280x720'
+            if (-not (Test-MPVStreamFormatNoneValue $CommandGeometry)) {
+                $geometry = if (Test-MPVStreamCommandAutoValue $CommandGeometry) { $sizeGeometry[$Size] } else { [string]$CommandGeometry }
+                if ($geometry) { $arguments += "--geometry=$geometry" }
+            }
+            if (-not (Test-MPVStreamFormatNoneValue $CommandAutofit)) {
+                $autofit = if (Test-MPVStreamCommandAutoValue $CommandAutofit) { $sizeAutofit[$Size] } else { [string]$CommandAutofit }
+                if ($autofit) { $arguments += "--autofit=$autofit" }
+            }
+            if (Test-MPVStreamCommandEnabledValue -Value $CommandNoBorder -AutoValue:$false) { $arguments += '--no-border' }
+            if (Test-MPVStreamCommandEnabledValue -Value $CommandOntop -AutoValue:$false) { $arguments += '--ontop' }
         }
         'Max' { $arguments += '--fullscreen' }
     }
 
     if ($AudioOnly) { $arguments += '--no-video' }
     if ($Loop) { $arguments += '--loop=inf' }
-    if ($HardwareAccel) { $arguments += '--hwdec=auto-safe' }
-    if ($RememberPlaybackSpeed) {
+    if (-not (Test-MPVStreamFormatNoneValue $CommandHwdec)) {
+        if (Test-MPVStreamCommandAutoValue $CommandHwdec) {
+            if ($HardwareAccel) { $arguments += '--hwdec=auto-safe' }
+        } elseif ([string]$CommandHwdec -ne 'no') {
+            $arguments += "--hwdec=$CommandHwdec"
+        }
+    }
+    if (Test-MPVStreamCommandEnabledValue -Value $CommandSavePosition -AutoValue:([bool]$RememberPlaybackSpeed)) {
         $arguments += '--save-position-on-quit'
-        $arguments += '--watch-later-options=start,speed'
+    }
+
+    if (-not (Test-MPVStreamFormatNoneValue $CommandWatchLaterOptions)) {
+        $watchLaterOptions = if (Test-MPVStreamCommandAutoValue $CommandWatchLaterOptions) { 'start,speed' } else { [string]$CommandWatchLaterOptions }
+        if ($RememberPlaybackSpeed -or -not (Test-MPVStreamCommandAutoValue $CommandWatchLaterOptions)) {
+            $arguments += "--watch-later-options=$watchLaterOptions"
+        }
     }
 
     if ($ReversePlaylist) {
@@ -433,7 +515,7 @@ function New-MPVStreamMpvArgument {
         $arguments += "--ytdl-raw-options=cookies=$CookiePath"
     }
 
-    $arguments += '--ytdl-raw-options=no-download-archive='
+    if ($CommandNoDownloadArchive) { $arguments += '--ytdl-raw-options=no-download-archive=' }
 
     if (-not $NoSubtitles) {
         $subtitleValue = if ($SubtitleLanguage) { ($SubtitleLanguage -join ',') } else { 'en' }

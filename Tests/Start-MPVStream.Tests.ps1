@@ -95,6 +95,15 @@ Describe 'Start-MPVStream behavior' {
             $config.commandAppendArgument | Should Be $null
             $config.commandUrl | Should Be $null
             $config.commandBackground | Should Be $null
+            $config.commandTerminal | Should Be 'auto'
+            $config.commandGeometry | Should Be 'from size'
+            $config.commandAutofit | Should Be 'from size'
+            $config.commandNoBorder | Should Be 'auto'
+            $config.commandOntop | Should Be 'auto'
+            $config.commandHwdec | Should Be 'auto'
+            $config.commandSavePosition | Should Be 'auto'
+            $config.commandWatchLaterOptions | Should Be 'start,speed'
+            $config.commandNoDownloadArchive | Should Be $true
             $config.ytdlVideoSelector | Should Be 'bestvideo'
             $config.ytdlVideoCodecFilter | Should Be 'auto'
             $config.ytdlMaxHeight | Should Be 'from quality'
@@ -500,6 +509,7 @@ Describe 'Start-MPVStream behavior' {
             }
 
             function yt-dlp {
+                $script:ytdlpArgs = $args
                 return @(
                     "First Result`tfirst123`tYoutube`thttps://www.youtube.com/watch?v=first123`t1:00`tChannel One`t100",
                     "Second Result`tsecond123`tYoutube`thttps://www.youtube.com/watch?v=second123`t2:00`tChannel Two`t200"
@@ -525,6 +535,7 @@ Describe 'Start-MPVStream behavior' {
             Remove-Item Function:\mpv -ErrorAction SilentlyContinue
             Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
             Remove-Variable mpvArgs -Scope Script -ErrorAction SilentlyContinue
+            Remove-Variable ytdlpArgs -Scope Script -ErrorAction SilentlyContinue
         }
     }
 
@@ -809,6 +820,18 @@ Describe 'Start-MPVStream behavior' {
 
             $defaultStringArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat '720p' -HardwareAccel -YtdlVideoSelector bestvideo -YtdlVideoCodecFilter auto -YtdlMaxHeight 'from quality' -YtdlAudioSelector bestaudio -YtdlFallbackSelector best)
             ($defaultStringArgs -contains '--ytdl-format=bestvideo[vcodec!*=av01][height<=720]+bestaudio/best[vcodec!*=av01][height<=720]/best[height<=720]') | Should Be $true
+
+            $customCommandPartArgs = @(New-MPVStreamMpvArgument -Size PIP -YtdlFormat best -HardwareAccel -CommandTerminal true -CommandGeometry '320x180-10-10' -CommandAutofit '320x180' -CommandNoBorder true -CommandOntop true -CommandHwdec 'auto-safe' -CommandSavePosition true -CommandWatchLaterOptions 'start,speed' -CommandNoDownloadArchive $true -YtdlVideoCodecFilter 'vcodec^=vp9' -YtdlMaxHeight '<none>')
+            ($customCommandPartArgs -contains '--terminal=yes') | Should Be $true
+            ($customCommandPartArgs -contains '--geometry=320x180-10-10') | Should Be $true
+            ($customCommandPartArgs -contains '--autofit=320x180') | Should Be $true
+            ($customCommandPartArgs -contains '--no-border') | Should Be $true
+            ($customCommandPartArgs -contains '--ontop') | Should Be $true
+            ($customCommandPartArgs -contains '--hwdec=auto-safe') | Should Be $true
+            ($customCommandPartArgs -contains '--save-position-on-quit') | Should Be $true
+            ($customCommandPartArgs -contains '--watch-later-options=start,speed') | Should Be $true
+            ($customCommandPartArgs -contains '--ytdl-raw-options=no-download-archive=') | Should Be $true
+            ($customCommandPartArgs -contains '--ytdl-format=bestvideo[vcodec^=vp9]+bestaudio/best[vcodec^=vp9]') | Should Be $true
         }
     }
 
