@@ -528,6 +528,7 @@ Describe 'Start-MPVStream behavior' {
 
             Start-MPVStream 'first result' -Search -First -Size Small -YtdlFormat audio
 
+            $script:ytdlpArgs[5] | Should Be '1:1'
             $script:mpvArgs[-1] | Should Be 'https://www.youtube.com/watch?v=first123'
 
             Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
@@ -558,7 +559,7 @@ Describe 'Start-MPVStream behavior' {
             Start-MPVStream -Home -First -Size Small -YtdlFormat audio
 
             $script:ytdlpArgs[0] | Should Be 'https://www.youtube.com/'
-            $script:ytdlpArgs[5] | Should Be '1:10'
+            $script:ytdlpArgs[5] | Should Be '1:1'
             $script:mpvArgs[-1] | Should Be 'https://www.youtube.com/watch?v=home123'
 
             Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue

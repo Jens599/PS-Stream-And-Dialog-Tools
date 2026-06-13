@@ -66,6 +66,7 @@ function Select-MPVStreamMenuIndex {
                 MenuTitle    = $option.Title
                 CurrentValue = $option.CurrentValue
                 DefaultValue = $option.DefaultValue
+                Tooltip      = $option.Tooltip
             }
             continue
         }
@@ -88,6 +89,8 @@ function Select-MPVStreamSearchResultWithFzf {
     param([object[]]$Items, [string]$Title)
 
     $isOptionMenu = Test-MPVStreamOptionMenu -Items $Items
+    $tooltipPath = $null
+    $tooltipScriptPath = $null
 
     $lines = for ($i = 0; $i -lt $Items.Count; $i++) {
         if ($isOptionMenu) {
@@ -98,27 +101,75 @@ function Select-MPVStreamSearchResultWithFzf {
     }
 
     $header = $Title
+    $controls = 'Enter select | Esc cancel'
     if (-not $isOptionMenu) {
         $header = @(
             $Title,
             ('{0,-3} {1,-8} {2,-8} {3,12}  {4,-20}  {5}' -f 'No', 'Type', 'Length', 'Views', 'Uploader', 'Title')
         ) -join "`n"
     } elseif (Test-MPVStreamOptionMenuHasValueColumns -Items $Items) {
+        $controls = if (Test-MPVStreamOptionMenuHasTooltips -Items $Items) { 'Enter edit/open | Alt-T tooltip | Esc back' } else { 'Enter edit/open | Esc back' }
         $header = @(
             $Title,
             ('{0,-3} {1,-32} {2,-24} {3}' -f 'No', 'Setting', 'Current', 'Default')
         ) -join "`n"
+    } else {
+        $controls = if (Test-MPVStreamOptionMenuHasTooltips -Items $Items) { 'Enter select | Alt-T tooltip | Esc back' } else { 'Enter select | Esc back' }
     }
 
-    $selected = $lines | fzf `
-        --height 55% `
-        --layout reverse `
-        --border rounded `
-        --info inline `
-        --header $header `
-        --prompt 'Search> ' `
-        --pointer '>' `
-        --marker '+'
+    $fzfArguments = @(
+        '--height', '55%'
+        '--layout', 'reverse'
+        '--border', 'rounded'
+        '--border-label', " $controls "
+        '--border-label-pos', '-2:bottom'
+        '--info', 'inline'
+        '--cycle'
+        '--header', $header
+        '--prompt', 'Search> '
+        '--pointer', '>'
+        '--marker', '+'
+    )
+
+    if ($isOptionMenu -and (Test-MPVStreamOptionMenuHasTooltips -Items $Items)) {
+        $tooltipPath = [System.IO.Path]::GetTempFileName()
+        $tooltipScriptPath = [System.IO.Path]::ChangeExtension([System.IO.Path]::GetTempFileName(), '.ps1')
+        for ($i = 0; $i -lt $Items.Count; $i++) {
+            $tooltip = Get-MPVStreamDisplayValue $Items[$i].Tooltip
+            "{0:00}`t{1}" -f ($i + 1), $tooltip | Add-Content -LiteralPath $tooltipPath -Encoding UTF8
+        }
+
+        @'
+param(
+    [string]$TooltipPath,
+    [string]$Index
+)
+
+if (-not (Test-Path -LiteralPath $TooltipPath -PathType Leaf)) { return }
+
+Get-Content -LiteralPath $TooltipPath | ForEach-Object {
+    $parts = $_ -split "`t", 2
+    if ($parts.Count -eq 2 -and $parts[0] -eq $Index) {
+        $parts[1]
+        return
+    }
+}
+'@ | Set-Content -LiteralPath $tooltipScriptPath -Encoding UTF8
+
+        $previewCommand = 'pwsh -NoProfile -ExecutionPolicy Bypass -File "' + $tooltipScriptPath + '" "' + $tooltipPath + '" {1}'
+        $fzfArguments += @('--preview', $previewCommand, '--preview-window', 'down:4:hidden:wrap', '--bind', 'alt-t:toggle-preview')
+    }
+
+    try {
+        $selected = $lines | fzf @fzfArguments
+    } finally {
+        if ($tooltipPath -and (Test-Path -LiteralPath $tooltipPath -PathType Leaf)) {
+            Remove-Item -LiteralPath $tooltipPath -Force -ErrorAction SilentlyContinue
+        }
+        if ($tooltipScriptPath -and (Test-Path -LiteralPath $tooltipScriptPath -PathType Leaf)) {
+            Remove-Item -LiteralPath $tooltipScriptPath -Force -ErrorAction SilentlyContinue
+        }
+    }
     if (-not $selected) {
         $global:LASTEXITCODE = 0
         return $null
@@ -232,6 +283,18 @@ function Test-MPVStreamOptionMenuHasValueColumns {
 
     foreach ($item in $Items) {
         if (($item.PSObject.Properties.Name -contains 'CurrentValue') -or ($item.PSObject.Properties.Name -contains 'DefaultValue')) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-MPVStreamOptionMenuHasTooltips {
+    param([object[]]$Items)
+
+    foreach ($item in $Items) {
+        if (($item.PSObject.Properties.Name -contains 'Tooltip') -and -not [string]::IsNullOrWhiteSpace([string]$item.Tooltip)) {
             return $true
         }
     }

@@ -184,6 +184,7 @@ function Start-MPVStream {
         if (-not $PSBoundParameters.ContainsKey('Size') -and $configData.size) { $Size = $configData.size }
         if (-not $PSBoundParameters.ContainsKey('YtdlFormat') -and $configData.ytdlFormat) { $YtdlFormat = $configData.ytdlFormat }
         if (-not $PSBoundParameters.ContainsKey('MaxResults') -and $configData.maxResults) { $MaxResults = $configData.maxResults }
+        if ($First -and -not $PSBoundParameters.ContainsKey('MaxResults') -and -not $Type -and -not $Playlist) { $MaxResults = 1 }
         if (-not $PSBoundParameters.ContainsKey('AudioOnly') -and $configData.audioOnly) { $AudioOnly = $true }
         if (-not $PSBoundParameters.ContainsKey('Background') -and $configData.background) { $Background = $true }
         if (-not $PSBoundParameters.ContainsKey('Loop') -and $configData.loop) { $Loop = $true }
