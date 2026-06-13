@@ -201,6 +201,7 @@ function Start-MPVStream {
                 return
             }
             $Type = $normalizedType
+            if ($Type -eq 'Playlist') { $Playlist = $true }
         }
 
         if ($Clipboard) {

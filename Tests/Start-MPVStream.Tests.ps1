@@ -153,7 +153,7 @@ Describe 'Start-MPVStream behavior' {
             ($script:mpvArgs -contains '--ytdl-format=bestvideo+bestaudio/best') | Should Be $true
             ($script:mpvArgs -contains '--no-video') | Should Be $true
             ($script:mpvArgs -contains '--loop=inf') | Should Be $true
-            ($script:mpvArgs -contains '--hwdec=auto') | Should Be $true
+            ($script:mpvArgs -contains '--hwdec=auto-safe') | Should Be $true
             ($script:mpvArgs -contains '--ytdl-raw-options=playlist-items=1-') | Should Be $true
             ($script:mpvArgs -contains '--ytdl-raw-options=playlist-reverse=') | Should Be $true
             ($script:mpvArgs -contains '--slang=en') | Should Be $false
@@ -189,6 +189,31 @@ Describe 'Start-MPVStream behavior' {
             Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
             Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
             Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Variable ytdlpArgs -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'uses playlist-specific search when type is playlist' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Read-MPVStreamConfig { Get-MPVStreamDefaultConfig }
+            function mpv { }
+            function yt-dlp {
+                $script:ytdlpArgs = $args
+                return @("Playlist Result`tPL123`tYoutubeTab`thttps://www.youtube.com/playlist?list=PL123")
+            }
+            function Select-MPVStreamSearchResult { param([object[]]$Items) $Items[0] }
+            function Add-MPVStreamHistoryItem { }
+
+            Start-MPVStream 'query' -Search -Type Playlist -DryRun
+
+            $script:ytdlpArgs[0] | Should Be 'https://www.youtube.com/results?search_query=query&sp=EgIQAw%3D%3D'
+
+            Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
+            Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
+            Remove-Item Function:\mpv -ErrorAction SilentlyContinue
+            Remove-Item Function:\Add-MPVStreamHistoryItem -ErrorAction SilentlyContinue
             Remove-Variable ytdlpArgs -Scope Script -ErrorAction SilentlyContinue
         }
     }
@@ -235,6 +260,27 @@ Describe 'Start-MPVStream behavior' {
 
             ConvertFrom-MPVStreamSearchRow "missing`tfields" | Should Be $null
             ConvertFrom-MPVStreamSearchRow "`tmissing-title`tYoutube`thttps://example.test" | Should Be $null
+        }
+    }
+
+    It 'uses the uploads playlist URL for selected channel videos tabs' {
+        Import-Module (Join-Path $repoRoot 'Start-MPVStream\Start-MPVStream.psd1') -Force
+
+        InModuleScope Start-MPVStream {
+            function Test-MPVStreamYouTubeTabHasItem { $true }
+
+            $selection = [pscustomobject]@{
+                Title = 'outsidexbox'
+                Type  = 'Channel'
+                Url   = 'https://www.youtube.com/channel/UCKk076mm-7JjLxJcFSXIPJA'
+            }
+
+            $resolved = Resolve-MPVStreamYouTubeChannelTabSelection -Selection $selection -ChannelTab Videos
+
+            $resolved.Type | Should Be 'Channel/Videos'
+            $resolved.Url | Should Be 'https://www.youtube.com/playlist?list=UUKk076mm-7JjLxJcFSXIPJA'
+
+            Remove-Item Function:\Test-MPVStreamYouTubeTabHasItem -ErrorAction SilentlyContinue
         }
     }
 
@@ -680,7 +726,7 @@ Describe 'Start-MPVStream behavior' {
 
             $resultItems = @($script:selectedItems | Where-Object { -not $_.IsLoadMore })
             $resultItems.Count | Should Be 1
-            $resultItems[0].Type | Should Be 'Channel'
+            $resultItems[0].Type | Should Match '^Channel'
 
             Remove-Item Function:\yt-dlp -ErrorAction SilentlyContinue
             Remove-Item Function:\Select-MPVStreamSearchResult -ErrorAction SilentlyContinue
@@ -703,7 +749,7 @@ Describe 'Start-MPVStream behavior' {
             ($mpvArgs -contains '--ontop') | Should Be $true
             ($mpvArgs -contains '--no-video') | Should Be $true
             ($mpvArgs -contains '--loop=inf') | Should Be $true
-            ($mpvArgs -contains '--hwdec=auto') | Should Be $true
+            ($mpvArgs -contains '--hwdec=auto-safe') | Should Be $true
             ($mpvArgs -contains '--ytdl-raw-options=playlist-items=1-') | Should Be $true
             ($mpvArgs -contains '--ytdl-raw-options=playlist-reverse=') | Should Be $true
             ($mpvArgs -contains '--ytdl-format=bestvideo[height<=720]+bestaudio/best') | Should Be $true
@@ -732,6 +778,10 @@ Describe 'Start-MPVStream behavior' {
             $speedNotRememberedArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat audio -RememberPlaybackSpeed $false)
             ($speedNotRememberedArgs -contains '--save-position-on-quit') | Should Be $false
             ($speedNotRememberedArgs -contains '--watch-later-options=start,speed') | Should Be $false
+
+            $hardwareVideoArgs = @(New-MPVStreamMpvArgument -Size Small -YtdlFormat '720p' -HardwareAccel)
+            ($hardwareVideoArgs -contains '--hwdec=auto-safe') | Should Be $true
+            ($hardwareVideoArgs -contains '--ytdl-format=bestvideo[vcodec!*=av01][height<=720]+bestaudio/best[vcodec!*=av01][height<=720]/best[height<=720]') | Should Be $true
         }
     }
 
