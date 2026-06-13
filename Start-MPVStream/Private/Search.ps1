@@ -140,6 +140,7 @@ function Select-MPVStreamYouTubeSearchResult {
         $searchResults = @(Search-MPVStreamYouTube @searchParameters)
         if ($searchResults.Count -eq 0) {
             Write-Host $EmptyMessage -ForegroundColor Red
+            $global:LASTEXITCODE = 0
             return $null
         }
 
@@ -170,7 +171,10 @@ function Select-MPVStreamYouTubeSearchResult {
         }
 
         $selectedResult = Select-MPVStreamSearchResult -Items $selectableResults -Title $Title -Config $Config
-        if ($null -eq $selectedResult) { return $null }
+        if ($null -eq $selectedResult) {
+            $global:LASTEXITCODE = 0
+            return $null
+        }
 
         if ($selectedResult.IsLoadMore) {
             $previousResultCount = $searchResults.Count
@@ -234,6 +238,17 @@ function Test-MPVStreamYouTubeTabHasItem {
     return ($LASTEXITCODE -eq 0 -and @($output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_ -ne 'NA' }).Count -gt 0)
 }
 
+function Convert-MPVStreamYouTubeVideosTabToUploadsPlaylistUrl {
+    param([string]$Url)
+
+    if ($Url -match 'youtube\.com/channel/(UC[^/?#]+)') {
+        $uploadsPlaylistId = 'UU' + $Matches[1].Substring(2)
+        return "https://www.youtube.com/playlist?list=$uploadsPlaylistId"
+    }
+
+    return $Url
+}
+
 function Resolve-MPVStreamYouTubeChannelTabSelection {
     param(
         [Parameter(Mandatory = $true)]
@@ -257,7 +272,7 @@ function Resolve-MPVStreamYouTubeChannelTabSelection {
     foreach ($tab in @($tabs[$startIndex..($tabs.Count - 1)])) {
         $tabUrl = Get-MPVStreamYouTubeChannelTabUrl -Url $Selection.Url -ChannelTab $tab
         if (Test-MPVStreamYouTubeTabHasItem -Url $tabUrl -CookiePath $CookiePath) {
-            $Selection.Url = $tabUrl
+            $Selection.Url = if ($tab -eq 'Videos') { Convert-MPVStreamYouTubeVideosTabToUploadsPlaylistUrl $tabUrl } else { $tabUrl }
             $Selection.Type = "Channel/$tab"
             if ($tab -ne $ChannelTab) {
                 Write-Warning "Channel $ChannelTab tab has no playable items. Using $tab tab instead."

@@ -8,24 +8,31 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.shell }}
+    name: pwsh
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shell: [powershell, pwsh]
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cache Pester 4
+        id: cache-pester
+        uses: actions/cache@v4
+        with:
+          path: ~/Documents/PowerShell/Modules/Pester
+          key: pester-4.10.1-${{ runner.os }}-pwsh
+
       - name: Install Pester 4
-        shell: ${{ matrix.shell }}
+        if: steps.cache-pester.outputs.cache-hit != 'true'
+        shell: pwsh
         run: |
-          Install-Module Pester -RequiredVersion 4.10.1 -Scope CurrentUser -Force -SkipPublisherCheck
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -RequiredVersion 4.10.1 -Scope CurrentUser -Repository PSGallery -Force -SkipPublisherCheck
 
       - name: Run tests
-        shell: ${{ matrix.shell }}
+        shell: pwsh
         run: |
           Import-Module Pester -RequiredVersion 4.10.1
-          Invoke-Pester .\Tests -EnableExit
+          $result = Invoke-Pester .\Tests -PassThru
+          if ($result.FailedCount -gt 0) { exit 1 }

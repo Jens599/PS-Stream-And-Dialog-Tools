@@ -100,7 +100,10 @@ function Select-MPVStreamSearchResultWithFzf {
         --prompt 'Search> ' `
         --pointer '>' `
         --marker '+'
-    if (-not $selected) { return $null }
+    if (-not $selected) {
+        $global:LASTEXITCODE = 0
+        return $null
+    }
 
     if ($selected -match '^(\d+)\s') {
         return $Items[[int]$Matches[1] - 1]

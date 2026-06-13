@@ -172,6 +172,9 @@ function Invoke-MPVStreamPlayerWithUrl {
 
     $process = Start-MPVStreamPlayerProcess -Player $Player -Argument $startupArguments -Background:$Background
     try {
+        Write-Host "→ MPV window opened; loading URL..." -ForegroundColor Cyan
+        if (-not $Background) { Start-Sleep -Milliseconds 200 }
+        Write-Host "→ Sending URL to MPV..." -ForegroundColor Cyan
         Send-MPVStreamIpcCommand -PipeName $pipeName -Command @('loadfile', $Url, 'replace')
         if ($Background) { return }
         $process.WaitForExit()
@@ -218,6 +221,15 @@ function New-MPVStreamMpvArgument {
         'best'  = 'bestvideo+bestaudio/best'
         'audio' = 'bestaudio/best'
     }
+    if ($HardwareAccel -and -not $AudioOnly) {
+        $formatMap = @{
+            '480p'  = 'bestvideo[vcodec!*=av01][height<=480]+bestaudio/best[vcodec!*=av01][height<=480]/best[height<=480]'
+            '720p'  = 'bestvideo[vcodec!*=av01][height<=720]+bestaudio/best[vcodec!*=av01][height<=720]/best[height<=720]'
+            '1080p' = 'bestvideo[vcodec!*=av01][height<=1080]+bestaudio/best[vcodec!*=av01][height<=1080]/best[height<=1080]'
+            'best'  = 'bestvideo[vcodec!*=av01]+bestaudio/best[vcodec!*=av01]/best'
+            'audio' = 'bestaudio/best'
+        }
+    }
 
     $arguments = @()
     if (-not $Background) { $arguments += '--terminal=yes' }
@@ -242,7 +254,7 @@ function New-MPVStreamMpvArgument {
 
     if ($AudioOnly) { $arguments += '--no-video' }
     if ($Loop) { $arguments += '--loop=inf' }
-    if ($HardwareAccel) { $arguments += '--hwdec=auto' }
+    if ($HardwareAccel) { $arguments += '--hwdec=auto-safe' }
     if ($RememberPlaybackSpeed) {
         $arguments += '--save-position-on-quit'
         $arguments += '--watch-later-options=start,speed'
